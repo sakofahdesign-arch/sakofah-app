@@ -2,7 +2,8 @@
 
 import { Suspense, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import { submitOffsite } from './actions';
 
 export default function OffsitePage() {
@@ -27,12 +28,25 @@ function OffsiteInner() {
   const [err, setErr] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  const params = useSearchParams();
 
+  // Auto-detect direction from today's checkins
   useEffect(() => {
-    const d = params.get('dir');
-    if (d === 'out') setDirection('out');
-  }, [params]);
+    (async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: emp } = await supabase.from('employees').select('emp_id').eq('id', user.id).single();
+      if (!emp) return;
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: rows } = await supabase.from('checkins').select('type')
+        .eq('emp_id', emp.emp_id)
+        .gte('ts', `${today}T00:00:00`)
+        .lte('ts', `${today}T23:59:59`);
+      const types = (rows ?? []).map((r) => r.type);
+      const hasIn = types.includes('in') || types.includes('offsite_in');
+      setDirection(hasIn ? 'out' : 'in');
+    })();
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -83,16 +97,11 @@ function OffsiteInner() {
     c.width = w; c.height = h;
     const ctx = c.getContext('2d')!;
 
-    // mirror front camera
-    if (facing === 'user') {
-      ctx.translate(w, 0);
-      ctx.scale(-1, 1);
-    }
+    if (facing === 'user') { ctx.translate(w, 0); ctx.scale(-1, 1); }
     ctx.drawImage(v, 0, 0, w, h);
     if (facing === 'user') ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    // === Watermark ===
-    // Top brand badge
+    // Watermark
     const topH = 56;
     ctx.fillStyle = 'rgba(214,242,107,0.95)';
     ctx.fillRect(0, 0, w, topH);
@@ -100,7 +109,6 @@ function OffsiteInner() {
     ctx.font = 'bold 26px sans-serif';
     ctx.fillText(`SAKOFAH · ${direction === 'in' ? 'OFF-SITE IN' : 'OFF-SITE OUT'}`, 16, 36);
 
-    // Bottom info panel
     const botH = 110;
     ctx.fillStyle = 'rgba(14,14,16,0.78)';
     ctx.fillRect(0, h - botH, w, botH);
@@ -149,7 +157,6 @@ function OffsiteInner() {
     fd.append('lat', String(coords.lat));
     fd.append('lng', String(coords.lng));
     fd.append('location', location);
-    fd.append('direction', direction);
 
     startTransition(async () => {
       const res = await submitOffsite(fd);
@@ -158,7 +165,8 @@ function OffsiteInner() {
     });
   }
 
-  const dirColor = direction === 'in' ? '#7c5cff' : '#ff7a3d';
+  const dirColor = direction === 'in' ? '#d6f26b' : '#ff9d9d';
+  const dirText = direction === 'in' ? '#0e0e10' : '#501313';
   const dirLabel = direction === 'in' ? 'Off-site IN' : 'Off-site OUT';
   const dirIcon = direction === 'in' ? 'arrow-big-up-line-filled' : 'arrow-big-down-line-filled';
 
@@ -171,31 +179,10 @@ function OffsiteInner() {
 
       <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 11, color: '#5c5c60' }}>โหมดลานอกสถานที่</div>
-        <div style={{ fontSize: 20, fontWeight: 600 }}>{dirLabel}</div>
-      </div>
-
-      {/* Direction switcher */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, padding: 4, background: '#0e0e10', borderRadius: 14, marginBottom: 12 }}>
-        <button
-          onClick={() => setDirection('in')}
-          style={{
-            background: direction === 'in' ? '#7c5cff' : 'transparent',
-            color: direction === 'in' ? '#fff' : '#c9c9cc',
-            border: 'none', borderRadius: 11, padding: '8px', fontWeight: 600, fontSize: 13, cursor: 'pointer'
-          }}
-        >
-          <i className="ti ti-arrow-big-up-line-filled" style={{ fontSize: 14, marginRight: 4 }} aria-hidden></i>เข้า (IN)
-        </button>
-        <button
-          onClick={() => setDirection('out')}
-          style={{
-            background: direction === 'out' ? '#ff7a3d' : 'transparent',
-            color: direction === 'out' ? '#fff' : '#c9c9cc',
-            border: 'none', borderRadius: 11, padding: '8px', fontWeight: 600, fontSize: 13, cursor: 'pointer'
-          }}
-        >
-          <i className="ti ti-arrow-big-down-line-filled" style={{ fontSize: 14, marginRight: 4 }} aria-hidden></i>ออก (OUT)
-        </button>
+        <div style={{ fontSize: 22, fontWeight: 700, color: dirColor === '#d6f26b' ? '#4a6b00' : '#a32d2d' }}>
+          <i className={`ti ti-${dirIcon}`} style={{ fontSize: 22, verticalAlign: -3, marginRight: 6 }} aria-hidden></i>
+          {dirLabel}
+        </div>
       </div>
 
       {/* Camera */}
@@ -212,11 +199,7 @@ function OffsiteInner() {
         )}
         <video
           ref={videoRef}
-          style={{
-            width: '100%', height: '100%', objectFit: 'cover',
-            display: stream ? 'block' : 'none',
-            transform: facing === 'user' ? 'scaleX(-1)' : 'none',
-          }}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: stream ? 'block' : 'none', transform: facing === 'user' ? 'scaleX(-1)' : 'none' }}
           playsInline muted
         />
         {photoUrl && <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
@@ -224,15 +207,11 @@ function OffsiteInner() {
 
         {stream && (
           <>
-            <button
-              onClick={flipCamera}
-              aria-label="สลับกล้อง"
-              style={{
-                position: 'absolute', top: 10, right: 10, width: 38, height: 38, borderRadius: '50%',
-                background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center'
-              }}
-            >
+            <button onClick={flipCamera} aria-label="สลับกล้อง" style={{
+              position: 'absolute', top: 10, right: 10, width: 38, height: 38, borderRadius: '50%',
+              background: 'rgba(0,0,0,0.55)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center'
+            }}>
               <i className="ti ti-camera-rotate" style={{ fontSize: 20 }} aria-hidden></i>
             </button>
             <button onClick={takePhoto} style={{
@@ -240,7 +219,7 @@ function OffsiteInner() {
               width: 64, height: 64, borderRadius: '50%', background: dirColor,
               border: '4px solid #fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}>
-              <i className="ti ti-camera" style={{ fontSize: 28, color: '#fff' }} aria-hidden></i>
+              <i className="ti ti-camera" style={{ fontSize: 28, color: dirText }} aria-hidden></i>
             </button>
           </>
         )}
@@ -253,29 +232,32 @@ function OffsiteInner() {
       )}
 
       {/* Form */}
-      <div className="pill-dark" style={{ marginBottom: 6 }}>
-        <div className="t-d-3" style={{ fontSize: 11 }}>สถานที่ปฏิบัติงาน</div>
+      <div style={{ background: '#1a1a1c', border: '0.5px solid #2a2a2d', borderRadius: 14, padding: '10px 12px', marginBottom: 6 }}>
+        <div style={{ fontSize: 11, color: '#8e8e92' }}>
+          สถานที่ปฏิบัติงาน <span style={{ color: '#ff5b5b', fontWeight: 700 }}>*</span>
+        </div>
         <input
           value={location}
           onChange={(e) => setLocation(e.target.value)}
           placeholder="เช่น โรงเรียนบ้านตันหยง · ปัตตานี"
+          required
           style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 13, width: '100%', outline: 'none', marginTop: 2 }}
         />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
-        <div className="pill-dark">
-          <div className="t-d-3" style={{ fontSize: 11 }}>วันที่</div>
+        <div style={{ background: '#1a1a1c', border: '0.5px solid #2a2a2d', borderRadius: 14, padding: '10px 12px' }}>
+          <div style={{ fontSize: 11, color: '#8e8e92' }}>วันที่</div>
           <div style={{ fontSize: 12, color: '#fff' }}>{now.toLocaleDateString('th-TH')}</div>
         </div>
-        <div className="pill-dark">
-          <div className="t-d-3" style={{ fontSize: 11 }}>เวลา</div>
-          <div className="accent" style={{ fontSize: 12, fontWeight: 600 }}>{now.toLocaleTimeString('th-TH')}</div>
+        <div style={{ background: '#1a1a1c', border: '0.5px solid #2a2a2d', borderRadius: 14, padding: '10px 12px' }}>
+          <div style={{ fontSize: 11, color: '#8e8e92' }}>เวลา</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#d6f26b' }}>{now.toLocaleTimeString('th-TH')}</div>
         </div>
       </div>
 
-      <div className="pill-dark" style={{ marginBottom: 12 }}>
-        <div className="t-d-3" style={{ fontSize: 11 }}>พิกัด GPS</div>
+      <div style={{ background: '#1a1a1c', border: '0.5px solid #2a2a2d', borderRadius: 14, padding: '10px 12px', marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: '#8e8e92' }}>พิกัด GPS</div>
         <div style={{ fontSize: 12, color: '#fff' }}>
           {coords ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}` : 'กำลังค้นหา...'}
         </div>
@@ -287,11 +269,9 @@ function OffsiteInner() {
         </div>
       )}
 
-      <button
-        onClick={submit}
-        disabled={pending || !photo || !coords || !location}
+      <button onClick={submit} disabled={pending || !photo || !coords || !location}
         style={{
-          background: dirColor, color: '#fff', border: 'none', borderRadius: 14,
+          background: dirColor, color: dirText, border: 'none', borderRadius: 14,
           padding: 14, fontWeight: 700, fontSize: 14, width: '100%', cursor: 'pointer',
           opacity: (pending || !photo || !coords || !location) ? 0.5 : 1,
         }}
@@ -301,7 +281,7 @@ function OffsiteInner() {
       </button>
 
       <div style={{ marginTop: 14, fontSize: 10, color: '#5c5c60', textAlign: 'center' }}>
-        คำขอจะส่งให้ HR อนุมัติก่อนนับเป็นเวลาทำงาน
+        บันทึกอัตโนมัติ ไม่ต้องรอการอนุมัติ
       </div>
     </main>
   );

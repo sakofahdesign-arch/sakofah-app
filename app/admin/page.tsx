@@ -17,10 +17,9 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const start = new Date(y, m - 1, 1).toISOString();
   const end = new Date(y, m, 1).toISOString();
 
-  const [empsRes, checkinsRes, pendingRes, settingsRes] = await Promise.all([
-    supabase.from('employees').select('emp_id, name, role, active'),
-    supabase.from('checkins').select('*').gte('ts', start).lt('ts', end),
-    supabase.from('checkins').select('*, employees!inner(name)').eq('status', 'pending').order('ts', { ascending: false }),
+  const [empsRes, checkinsRes, settingsRes] = await Promise.all([
+    supabase.from('employees').select('emp_id, name, role, active, branch'),
+    supabase.from('checkins').select('*, employees!inner(name, branch)').gte('ts', start).lt('ts', end).order('ts', { ascending: false }),
     supabase.from('settings').select('*').single(),
   ]);
 
@@ -30,7 +29,6 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       monthStr={monthStr}
       employees={empsRes.data ?? []}
       checkins={checkinsRes.data ?? []}
-      pending={pendingRes.data ?? []}
       settings={settingsRes.data}
     />
   );

@@ -25,7 +25,7 @@ function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) 
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-const HOLD_DURATION = 2500; // 2.5 วินาที
+const HOLD_DURATION = 1000; // 1 วินาที
 
 export default function CheckinClient({ empName, empId, role, todayCheckins, settings }: Props) {
   const [now, setNow] = useState(new Date());
@@ -33,9 +33,9 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
   const [pending, startTransition] = useTransition();
-  const [holding, setHolding] = useState(false);
   const [holdProgress, setHoldProgress] = useState(0);
   const [sparkle, setSparkle] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const holdTimer = useRef<number | null>(null);
   const holdStart = useRef<number>(0);
 
@@ -61,8 +61,8 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
   const inRange = distance !== null && settings ? distance <= settings.radius_m : false;
 
   const types = todayCheckins.map((c) => c.type);
-  const hasCheckedIn = types.includes('in');
-  const hasCheckedOut = types.includes('out');
+  const hasCheckedIn = types.includes('in') || types.includes('offsite_in');
+  const hasCheckedOut = types.includes('out') || types.includes('offsite_out');
 
   function playDing() {
     try {
@@ -84,7 +84,6 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
 
   function startHold(type: 'in' | 'out') {
     if (!coords) { setToast({ kind: 'err', msg: 'ยังหาตำแหน่ง GPS ไม่เจอ' }); return; }
-    setHolding(true);
     setHoldProgress(0);
     holdStart.current = Date.now();
     const tick = () => {
@@ -103,7 +102,6 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
   function cancelHold() {
     if (holdTimer.current) cancelAnimationFrame(holdTimer.current);
     holdTimer.current = null;
-    setHolding(false);
     setHoldProgress(0);
   }
 
@@ -123,106 +121,150 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
   const dateStr = now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
   const workDays = settings?.work_days === 'MTWTF' ? 'จ–ศ' : 'ทุกวัน';
 
+  // GPS chip styling — black bg with lime border (in range) or red border (out of range)
+  const gpsBorder = !coords ? '#5c5c60' : inRange ? '#d6f26b' : '#e24b4a';
+  const gpsTextColor = !coords ? '#c9c9cc' : inRange ? '#d6f26b' : '#ff7a7a';
+  // Status chip — red if not checked in yet, peach-deep when in progress
+  const statusColor = !hasCheckedIn ? '#e24b4a' : hasCheckedOut ? '#5c5c60' : '#d6f26b';
+
   return (
-    <main style={{ minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 18 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+    <main className="no-select" style={{ minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 18 }}>
+      <style>{`
+        .no-select, .no-select * {
+          -webkit-user-select: none;
+          user-select: none;
+          -webkit-touch-callout: none;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .no-select input { -webkit-user-select: text; user-select: text; }
+        @keyframes sparkle-burst {
+          0% { opacity: 1; transform: scale(0.3); }
+          100% { opacity: 0; transform: scale(2.5); }
+        }
+        @keyframes float-up { from { transform: translateY(6px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .menu-pop { animation: float-up 0.15s ease-out; }
+      `}</style>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, position: 'relative' }}>
         <div>
-          <div className="t-l-3" style={{ fontSize: 11 }}>อัสสลามุอะลัยกุม</div>
+          <div style={{ fontSize: 11, color: '#5c5c60' }}>อัสสลามุอะลัยกุม</div>
           <div style={{ fontSize: 15, fontWeight: 600 }}>{empName}</div>
         </div>
-        <div style={{ display: 'flex', gap: 6 }}>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
           {role === 'admin' && (
-            <Link href="/admin" style={{ background: '#0e0e10', color: '#d6f26b', textDecoration: 'none', border: 'none', borderRadius: 999, padding: '4px 10px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <Link href="/admin" style={{ background: '#0e0e10', color: '#d6f26b', textDecoration: 'none', borderRadius: 999, padding: '5px 12px', fontSize: 11, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
               <i className="ti ti-shield-check" style={{ fontSize: 12 }} aria-hidden></i>Admin
             </Link>
           )}
-          <form action={signOut}>
-            <button type="submit" style={{ background: 'transparent', border: '0.5px solid rgba(0,0,0,0.15)', borderRadius: 999, padding: '4px 10px', fontSize: 11, cursor: 'pointer' }}>
-              <i className="ti ti-logout" style={{ fontSize: 12 }} aria-hidden></i> ออก
-            </button>
-          </form>
+          <button onClick={() => setMenuOpen((v) => !v)} style={{ width: 34, height: 34, borderRadius: '50%', background: '#0e0e10', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <i className="ti ti-dots-vertical" style={{ fontSize: 16 }} aria-hidden></i>
+          </button>
         </div>
+
+        {menuOpen && (
+          <>
+            <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+            <div className="menu-pop" style={{ position: 'absolute', top: 44, right: 0, background: '#0e0e10', borderRadius: 14, padding: 6, minWidth: 200, zIndex: 50, boxShadow: '0 8px 24px rgba(0,0,0,0.25)' }}>
+              <MenuItem icon="key" label="เปลี่ยน PIN" href="/account/pin" />
+              <MenuItem icon="device-mobile-cog" label="ขอเปลี่ยนเครื่อง" href="/account/device" />
+              <div style={{ height: 1, background: '#2a2a2d', margin: '4px 6px' }} />
+              <form action={signOut}>
+                <button type="submit" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', background: 'transparent', border: 'none', color: '#ff7a7a', padding: '10px 12px', fontSize: 13, borderRadius: 10, cursor: 'pointer', textAlign: 'left' }}>
+                  <i className="ti ti-logout" style={{ fontSize: 16 }} aria-hidden></i>ออกจากระบบ
+                </button>
+              </form>
+            </div>
+          </>
+        )}
       </div>
 
-      <div className="card-lime" style={{ borderRadius: 24, marginBottom: 12 }}>
-        <div className="t-l-2" style={{ fontSize: 11 }}>{dateStr}</div>
-        <div style={{ fontSize: 44, fontWeight: 600, letterSpacing: 1, lineHeight: 1 }}>{timeStr}</div>
-        <div className="t-l-2" style={{ fontSize: 11, marginTop: 4 }}>
+      {/* Clock card */}
+      <div style={{ background: '#d6f26b', color: '#0e0e10', borderRadius: 24, padding: 16, marginBottom: 12 }}>
+        <div style={{ fontSize: 11, color: '#2e2e32' }}>{dateStr}</div>
+        <div style={{ fontSize: 44, fontWeight: 700, letterSpacing: 1, lineHeight: 1 }}>{timeStr}</div>
+        <div style={{ fontSize: 11, color: '#2e2e32', marginTop: 4 }}>
           เวลาทำการ {settings?.work_start?.slice(0, 5) ?? '08:20'} – {settings?.work_end?.slice(0, 5) ?? '16:30'} น. · {workDays}
         </div>
       </div>
 
+      {/* Verify chips — dark bg with colored border */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
-        <VerifyCard
-          ok={!!coords && inRange}
-          label="พิกัด GPS"
-          value={gpsError ? 'ผิดพลาด' : !coords ? 'กำลังค้นหา...' : inRange ? `ในขอบเขต · ${Math.round(distance!)} ม.` : `นอกขอบเขต · ${Math.round(distance!)} ม.`}
-          icon="map-pin-check"
-        />
-        <VerifyCard
-          ok={hasCheckedIn && !hasCheckedOut}
-          warn={!hasCheckedIn}
-          label="สถานะวันนี้"
-          value={hasCheckedOut ? 'เช็คเอาท์แล้ว' : hasCheckedIn ? 'อยู่ในเวลาทำงาน' : 'ยังไม่เช็คอิน'}
-          icon="clock"
-        />
+        <div style={{ background: '#0e0e10', border: `1.5px solid ${gpsBorder}`, borderRadius: 14, padding: '10px 12px' }}>
+          <div style={{ fontSize: 10, color: '#8e8e92' }}>พิกัด GPS</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: gpsTextColor }}>
+            <i className="ti ti-map-pin-check" style={{ fontSize: 12, marginRight: 4 }} aria-hidden></i>
+            {gpsError ? 'ผิดพลาด' : !coords ? 'กำลังค้นหา...' : inRange ? `ในขอบเขต · ${Math.round(distance!)} ม.` : `นอกขอบเขต · ${Math.round(distance!)} ม.`}
+          </div>
+        </div>
+        <div style={{ background: '#0e0e10', border: `1.5px solid ${statusColor}`, borderRadius: 14, padding: '10px 12px' }}>
+          <div style={{ fontSize: 10, color: '#8e8e92' }}>สถานะวันนี้</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: statusColor }}>
+            <i className="ti ti-clock" style={{ fontSize: 12, marginRight: 4 }} aria-hidden></i>
+            {hasCheckedOut ? 'เช็คเอาท์แล้ว' : hasCheckedIn ? 'อยู่ในเวลาทำงาน' : 'ยังไม่เช็คอิน'}
+          </div>
+        </div>
       </div>
 
-      {/* MAIN ACTION BUTTON — long-press */}
-      {!hasCheckedIn ? (
-        <HoldButton
-          color="#7c5cff"
-          arrow="up"
-          label={holding ? 'กดค้างไว้...' : pending ? 'กำลังบันทึก...' : 'แตะค้างเพื่อเช็คอิน'}
-          subLabel="กดค้าง 2.5 วินาทีเพื่อยืนยัน"
-          progress={holdProgress}
-          sparkle={sparkle}
-          disabled={pending || !coords}
-          onStart={() => startHold('in')}
-          onCancel={cancelHold}
-        />
-      ) : !hasCheckedOut ? (
-        <HoldButton
-          color="#ff7a3d"
-          arrow="down"
-          label={holding ? 'กดค้างไว้...' : pending ? 'กำลังบันทึก...' : 'แตะค้างเพื่อเช็คเอาท์'}
-          subLabel={`เช็คอินเมื่อ ${todayCheckins.find((c) => c.type === 'in')?.ts.slice(11, 16)}`}
-          progress={holdProgress}
-          sparkle={sparkle}
-          disabled={pending || !coords}
-          onStart={() => startHold('out')}
-          onCancel={cancelHold}
-        />
-      ) : (
-        <div className="card-dark" style={{ borderRadius: 24, textAlign: 'center', marginBottom: 10 }}>
-          <i className="ti ti-circle-check-filled" style={{ fontSize: 36, color: '#d6f26b' }} aria-hidden></i>
-          <div style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}>วันนี้ลงเวลาครบแล้ว</div>
-          <div className="t-d-2" style={{ fontSize: 11 }}>เจอกันพรุ่งนี้ครับ 🌙</div>
-        </div>
-      )}
+      {/* MAIN ROUND ACTION BUTTON */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 18 }}>
+        {!hasCheckedIn ? (
+          <RoundHoldButton
+            color="#d6f26b" textColor="#0e0e10" arrow="up" label="เช็คอิน"
+            sub={pending ? 'กำลังบันทึก...' : 'กดค้าง 1 วินาที'}
+            progress={holdProgress} sparkle={sparkle} disabled={pending || !coords}
+            onStart={() => startHold('in')} onCancel={cancelHold}
+          />
+        ) : !hasCheckedOut ? (
+          <RoundHoldButton
+            color="#ff9d9d" textColor="#501313" arrow="down" label="เช็คเอาท์"
+            sub={pending ? 'กำลังบันทึก...' : `เข้างานเมื่อ ${todayCheckins.find((c) => c.type === 'in' || c.type === 'offsite_in')?.ts.slice(11, 16)}`}
+            progress={holdProgress} sparkle={sparkle} disabled={pending || !coords}
+            onStart={() => startHold('out')} onCancel={cancelHold}
+          />
+        ) : (
+          <div style={{ background: '#0e0e10', color: '#fff', borderRadius: 24, padding: 22, textAlign: 'center', width: '100%' }}>
+            <i className="ti ti-circle-check-filled" style={{ fontSize: 40, color: '#d6f26b' }} aria-hidden></i>
+            <div style={{ fontSize: 16, fontWeight: 600, marginTop: 4 }}>วันนี้ลงเวลาครบแล้ว</div>
+            <div style={{ fontSize: 11, color: '#c9c9cc' }}>เจอกันพรุ่งนี้ครับ 🌙</div>
+          </div>
+        )}
+      </div>
 
-      <Link href="/offsite" style={{ textDecoration: 'none', display: 'block', marginTop: 10 }}>
-        <div className="card-light" style={{ borderRadius: 18, display: 'flex', alignItems: 'center', gap: 12, background: '#fcdfb1' }}>
-          <div style={{ width: 44, height: 44, borderRadius: 12, background: '#0e0e10', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <i className="ti ti-map-pin-plus" style={{ fontSize: 22, color: '#d6f26b' }} aria-hidden></i>
+      {/* Off-site card — solid orange, white icon */}
+      <Link href="/offsite" style={{ textDecoration: 'none', display: 'block' }}>
+        <div style={{ background: '#f5a85c', borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div style={{ width: 46, height: 46, borderRadius: 14, background: 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <i className="ti ti-map-pin-plus" style={{ fontSize: 24, color: '#fff' }} aria-hidden></i>
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 14, fontWeight: 600 }}>ลานอกสถานที่</div>
-            <div style={{ fontSize: 11, color: '#5c4520' }}>ถ่ายรูป + GPS · {hasCheckedIn ? 'ออกนอกสถานที่' : 'เข้านอกสถานที่'}</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>ลานอกสถานที่</div>
+            <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.9)' }}>
+              {hasCheckedOut ? 'วันนี้ลงเวลาครบแล้ว' : hasCheckedIn ? 'ออกนอกสถานที่' : 'เข้านอกสถานที่'}
+            </div>
           </div>
-          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: '#5c4520' }} aria-hidden></i>
+          <i className="ti ti-chevron-right" style={{ fontSize: 18, color: '#fff' }} aria-hidden></i>
         </div>
       </Link>
 
+      {/* History — dark card */}
       {todayCheckins.length > 0 && (
-        <div style={{ background: '#e6e1f5', borderRadius: 18, padding: 14, marginTop: 10 }}>
-          <div style={{ fontSize: 11, color: '#4b3d8c', marginBottom: 6 }}>ประวัติวันนี้</div>
-          {todayCheckins.map((c, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: i > 0 ? '0.5px solid rgba(75,61,140,0.15)' : 'none', fontSize: 13 }}>
-              <span><i className={c.type === 'in' ? 'ti ti-login-2' : c.type === 'out' ? 'ti ti-logout-2' : 'ti ti-map-pin'} style={{ fontSize: 14, color: '#4b3d8c' }} aria-hidden></i> {c.type === 'in' ? 'เช็คอิน' : c.type === 'out' ? 'เช็คเอาท์' : c.type === 'offsite_in' ? 'นอกสถานที่ (เข้า)' : 'นอกสถานที่ (ออก)'}</span>
-              <span style={{ fontWeight: 500 }}>{new Date(c.ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
-            </div>
-          ))}
+        <div style={{ background: '#0e0e10', borderRadius: 18, padding: 14, marginTop: 10 }}>
+          <div style={{ fontSize: 11, color: '#8e8e92', marginBottom: 8 }}>ประวัติวันนี้</div>
+          {todayCheckins.map((c, i) => {
+            const isIn = c.type === 'in' || c.type === 'offsite_in';
+            const iconColor = isIn ? '#d6f26b' : '#ff9d9d';
+            const label = c.type === 'in' ? 'เช็คอิน' : c.type === 'out' ? 'เช็คเอาท์' : c.type === 'offsite_in' ? 'นอกสถานที่ (เข้า)' : 'นอกสถานที่ (ออก)';
+            return (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: i > 0 ? '0.5px solid #2a2a2d' : 'none', fontSize: 13, color: '#fff' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                  <i className={isIn ? 'ti ti-login-2' : 'ti ti-logout-2'} style={{ fontSize: 16, color: iconColor }} aria-hidden></i>
+                  {label}
+                </span>
+                <span style={{ fontWeight: 600, color: '#d6f26b' }}>{new Date(c.ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -233,7 +275,7 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
       {toast && (
         <div onClick={() => setToast(null)} style={{
           position: 'fixed', bottom: 20, left: 20, right: 20, maxWidth: 380, margin: '0 auto',
-          background: toast.kind === 'ok' ? '#d6f26b' : '#ff5b5b',
+          background: toast.kind === 'ok' ? '#d6f26b' : '#e24b4a',
           color: toast.kind === 'ok' ? '#0e0e10' : '#fff',
           padding: 14, borderRadius: 14, textAlign: 'center', fontWeight: 600, fontSize: 14,
           boxShadow: '0 8px 20px rgba(0,0,0,0.15)', cursor: 'pointer', zIndex: 50
@@ -245,72 +287,63 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
   );
 }
 
-function HoldButton({
-  color, arrow, label, subLabel, progress, sparkle, disabled, onStart, onCancel,
-}: {
-  color: string; arrow: 'up' | 'down'; label: string; subLabel: string;
-  progress: number; sparkle: boolean; disabled: boolean;
-  onStart: () => void; onCancel: () => void;
-}) {
-  const ringSize = 110;
-  const ringR = 50;
-  const ringC = 2 * Math.PI * ringR;
-  const ringOffset = ringC * (1 - progress);
-
+function MenuItem({ icon, label, href }: { icon: string; label: string; href: string }) {
   return (
-    <div
-      onPointerDown={(e) => { if (!disabled) { (e.target as Element).setPointerCapture?.(e.pointerId); onStart(); } }}
-      onPointerUp={onCancel}
-      onPointerCancel={onCancel}
-      onPointerLeave={onCancel}
-      style={{
-        background: color, color: '#fff', borderRadius: 28, padding: '22px 16px',
-        textAlign: 'center', userSelect: 'none', touchAction: 'none',
-        opacity: disabled ? 0.5 : 1, cursor: disabled ? 'not-allowed' : 'pointer',
-        position: 'relative', overflow: 'hidden',
-        boxShadow: progress > 0.5 ? `0 0 ${30 + progress * 40}px ${color}88` : 'none',
-        transition: 'box-shadow 0.1s',
-      }}
-    >
-      <div style={{ position: 'relative', width: ringSize, height: ringSize, margin: '0 auto 8px' }}>
-        <svg width={ringSize} height={ringSize} style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
-          <circle cx={ringSize / 2} cy={ringSize / 2} r={ringR} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="4" />
-          <circle cx={ringSize / 2} cy={ringSize / 2} r={ringR} fill="none" stroke="#fff" strokeWidth="4"
-            strokeLinecap="round" strokeDasharray={ringC} strokeDashoffset={ringOffset} style={{ transition: progress === 0 ? 'stroke-dashoffset 0.2s' : 'none' }} />
-        </svg>
-        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <i className={`ti ti-arrow-big-${arrow}-line-filled`} style={{ fontSize: 44, color: '#fff' }} aria-hidden></i>
-        </div>
-        {sparkle && <div className="sparkle-burst" />}
-      </div>
-      <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2 }}>{label}</div>
-      <div style={{ fontSize: 11, opacity: 0.85 }}>{subLabel}</div>
-
-      <style>{`
-        .sparkle-burst {
-          position: absolute; inset: 0; pointer-events: none;
-          background: radial-gradient(circle at center, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 60%);
-          animation: sparkle-burst 0.8s ease-out forwards;
-        }
-        @keyframes sparkle-burst {
-          0% { opacity: 1; transform: scale(0.3); }
-          100% { opacity: 0; transform: scale(2.5); }
-        }
-      `}</style>
-    </div>
+    <Link href={href} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', color: '#fff', fontSize: 13, borderRadius: 10, textDecoration: 'none' }}>
+      <i className={`ti ti-${icon}`} style={{ fontSize: 16, color: '#d6f26b' }} aria-hidden></i>{label}
+    </Link>
   );
 }
 
-function VerifyCard({ ok, warn, label, value, icon }: { ok: boolean; warn?: boolean; label: string; value: string; icon: string }) {
-  const bg = ok ? '#c5f1de' : warn ? '#fcdfb1' : '#fcc6c6';
-  const textCol = ok ? '#0f6e56' : warn ? '#854f0b' : '#a32d2d';
-  const textColMain = ok ? '#04342c' : warn ? '#412402' : '#501313';
+function RoundHoldButton({
+  color, textColor, arrow, label, sub, progress, sparkle, disabled, onStart, onCancel,
+}: {
+  color: string; textColor: string; arrow: 'up' | 'down'; label: string; sub: string;
+  progress: number; sparkle: boolean; disabled: boolean;
+  onStart: () => void; onCancel: () => void;
+}) {
+  const size = 200;
+  const r = size / 2 - 8;
+  const c = 2 * Math.PI * r;
+  const offset = c * (1 - progress);
+
   return (
-    <div style={{ background: bg, borderRadius: 14, padding: 10 }}>
-      <div style={{ fontSize: 10, color: textCol }}>{label}</div>
-      <div style={{ fontSize: 12, fontWeight: 600, color: textColMain }}>
-        <i className={`ti ti-${icon}`} style={{ fontSize: 12, marginRight: 4 }} aria-hidden></i>{value}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+      <div
+        onPointerDown={(e) => { if (!disabled) { (e.target as Element).setPointerCapture?.(e.pointerId); onStart(); } }}
+        onPointerUp={onCancel}
+        onPointerCancel={onCancel}
+        onPointerLeave={onCancel}
+        onContextMenu={(e) => e.preventDefault()}
+        style={{
+          position: 'relative', width: size, height: size, borderRadius: '50%',
+          background: color, color: textColor,
+          display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          opacity: disabled ? 0.5 : 1,
+          boxShadow: progress > 0.3 ? `0 0 ${20 + progress * 50}px ${color}aa` : '0 6px 18px rgba(0,0,0,0.15)',
+          transition: 'box-shadow 0.1s',
+          touchAction: 'none', userSelect: 'none',
+        }}
+      >
+        {/* progress ring */}
+        <svg width={size} height={size} style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth="6" />
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#fff" strokeWidth="6"
+            strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset}
+            style={{ transition: progress === 0 ? 'stroke-dashoffset 0.2s' : 'none' }} />
+        </svg>
+        <i className={`ti ti-arrow-big-${arrow}-line-filled`} style={{ fontSize: 60, color: textColor }} aria-hidden></i>
+        <div style={{ fontSize: 20, fontWeight: 700, marginTop: 4 }}>{label}</div>
+        {sparkle && (
+          <div style={{
+            position: 'absolute', inset: 0, borderRadius: '50%', pointerEvents: 'none',
+            background: 'radial-gradient(circle at center, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0) 70%)',
+            animation: 'sparkle-burst 0.8s ease-out forwards',
+          }} />
+        )}
       </div>
+      <div style={{ marginTop: 12, fontSize: 13, color: '#5c5c60', textAlign: 'center' }}>{sub}</div>
     </div>
   );
 }

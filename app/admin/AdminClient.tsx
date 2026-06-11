@@ -1,11 +1,10 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
-import { approveOffsite, rejectOffsite } from './actions';
 
-type Employee = { emp_id: string; name: string; role: string; active: boolean };
+type Employee = { emp_id: string; name: string; role: string; active: boolean; branch: string | null };
 type Checkin = {
   id: string;
   emp_id: string;
@@ -16,8 +15,8 @@ type Checkin = {
   photo_url: string | null;
   location_note: string | null;
   status: string;
+  employees: { name: string; branch: string | null };
 };
-type Pending = Checkin & { employees: { name: string } };
 type Settings = {
   office_lat: number; office_lng: number; radius_m: number;
   allowed_ssid: string; work_start: string; work_end: string;
@@ -25,35 +24,46 @@ type Settings = {
 } | null;
 
 const C = {
+  dark: '#0e0e10',
+  lime: '#d6f26b',
   purple: '#a89bf0',
-  purpleDeep: '#7c5cff',
   peach: '#fcdfb1',
   peachDeep: '#f5a85c',
-  lime: '#d6f26b',
-  limeSoft: '#e8f5a8',
-  dark: '#0e0e10',
-  red: '#fcc6c6',
+  redSoft: '#ff9d9d',
   redDeep: '#e24b4a',
+  mintDeep: '#5dcaa5',
   mint: '#c5f1de',
 };
 
+type View = 'daily' | 'weekly' | 'monthly';
+type TypeFilter = 'all' | 'in' | 'out' | 'offsite';
+
 export default function AdminClient({
-  adminName, monthStr, employees, checkins, pending, settings,
+  adminName, monthStr, employees, checkins, settings,
 }: {
   adminName: string;
   monthStr: string;
   employees: Employee[];
   checkins: Checkin[];
-  pending: Pending[];
   settings: Settings;
 }) {
-  const [pendingList, setPendingList] = useState(pending);
-  const [isPending, startTransition] = useTransition();
+  const [view, setView] = useState<View>('daily');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [branchFilter, setBranchFilter] = useState<string>('all');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+  const [search, setSearch] = useState('');
 
   const workStartHr = parseInt(settings?.work_start?.slice(0, 2) ?? '8', 10);
   const workStartMin = parseInt(settings?.work_start?.slice(3, 5) ?? '20', 10);
   const tolerance = settings?.late_tolerance_min ?? 5;
   const cutoffMin = workStartHr * 60 + workStartMin + tolerance;
+
+  const branches = useMemo(() => {
+    const set = new Set<string>();
+    employees.forEach((e) => e.branch && set.add(e.branch));
+    return Array.from(set);
+  }, [employees]);
 
   const stats = useMemo(() => {
     const ins = checkins.filter((c) => c.type === 'in');
@@ -67,53 +77,64 @@ export default function AdminClient({
     const onTime = ins.length - lateCount;
     const onTimeRate = ins.length === 0 ? 0 : Math.round((onTime / ins.length) * 100);
     const lateRate = ins.length === 0 ? 0 : Math.round((lateCount / ins.length) * 100);
-    return {
-      total: employees.length,
-      checkinDays: ins.length,
-      onTimeRate,
-      lateRate,
-      lateCount,
-      offsites: offsites.length,
-    };
+    return { total: employees.length, checkinDays: ins.length, onTimeRate, lateRate, lateCount, offsites: offsites.length };
   }, [checkins, employees, cutoffMin]);
 
-  const dailyData = useMemo(() => {
+  // Daily/weekly/monthly aggregation
+  const chartData = useMemo(() => {
     const [y, m] = monthStr.split('-').map(Number);
+    if (view === 'monthly') {
+      const ins = checkins.filter((c) => c.type === 'in').length;
+      const outs = checkins.filter((c) => c.type === 'out').length;
+      const offs = checkins.filter((c) => c.type.startsWith('offsite')).length;
+      return [{ label: `${y}-${String(m).padStart(2, '0')}`, ins, outs, offs }];
+    }
+    if (view === 'weekly') {
+      const weeks = [1, 8, 15, 22, 29];
+      return weeks.map((startDay, i) => {
+        const endDay = weeks[i + 1] ? weeks[i + 1] - 1 : 31;
+        const ins = checkins.filter((c) => { const d = new Date(c.ts).getDate(); return c.type === 'in' && d >= startDay && d <= endDay; }).length;
+        const outs = checkins.filter((c) => { const d = new Date(c.ts).getDate(); return c.type === 'out' && d >= startDay && d <= endDay; }).length;
+        const offs = checkins.filter((c) => { const d = new Date(c.ts).getDate(); return c.type.startsWith('offsite') && d >= startDay && d <= endDay; }).length;
+        return { label: `สัปดาห์ ${i + 1}`, ins, outs, offs };
+      });
+    }
+    // daily
     const daysInMonth = new Date(y, m, 0).getDate();
-    const arr: { day: number; office: number; offsite: number; late: number }[] = [];
-    for (let d = 1; d <= daysInMonth; d++) arr.push({ day: d, office: 0, offsite: 0, late: 0 });
+    const arr: { label: string; ins: number; outs: number; offs: number }[] = [];
+    for (let d = 1; d <= daysInMonth; d++) arr.push({ label: String(d), ins: 0, outs: 0, offs: 0 });
     checkins.forEach((c) => {
-      const dd = new Date(c.ts);
-      const day = dd.getDate();
-      if (c.type === 'in') {
-        arr[day - 1].office++;
-        const mins = dd.getHours() * 60 + dd.getMinutes();
-        if (mins > cutoffMin) arr[day - 1].late++;
-      }
-      if (c.type === 'offsite_in') arr[day - 1].offsite++;
+      const day = new Date(c.ts).getDate();
+      if (c.type === 'in') arr[day - 1].ins++;
+      if (c.type === 'out') arr[day - 1].outs++;
+      if (c.type.startsWith('offsite')) arr[day - 1].offs++;
     });
     return arr;
-  }, [checkins, monthStr, cutoffMin]);
+  }, [checkins, monthStr, view]);
 
-  const maxBar = Math.max(1, ...dailyData.map((d) => d.office + d.offsite));
+  const maxBar = Math.max(1, ...chartData.map((d) => d.ins + d.outs + d.offs));
 
-  function handleApprove(id: string) {
-    startTransition(async () => {
-      const res = await approveOffsite(id);
-      if (!res.error) setPendingList((list) => list.filter((p) => p.id !== id));
-    });
-  }
-  function handleReject(id: string) {
-    startTransition(async () => {
-      const res = await rejectOffsite(id);
-      if (!res.error) setPendingList((list) => list.filter((p) => p.id !== id));
-    });
-  }
+  // Filtered history rows
+  const historyRows = useMemo(() => {
+    return checkins
+      .filter((c) => {
+        if (typeFilter === 'in' && c.type !== 'in' && c.type !== 'offsite_in') return false;
+        if (typeFilter === 'out' && c.type !== 'out' && c.type !== 'offsite_out') return false;
+        if (typeFilter === 'offsite' && !c.type.startsWith('offsite')) return false;
+        if (branchFilter !== 'all' && c.employees.branch !== branchFilter) return false;
+        if (dateFrom && c.ts < `${dateFrom}T00:00:00`) return false;
+        if (dateTo && c.ts > `${dateTo}T23:59:59`) return false;
+        if (search) {
+          const q = search.toLowerCase();
+          if (!c.employees.name.toLowerCase().includes(q) && !c.emp_id.toLowerCase().includes(q)) return false;
+        }
+        return true;
+      });
+  }, [checkins, typeFilter, branchFilter, dateFrom, dateTo, search]);
 
   function exportExcel() {
     const wb = XLSX.utils.book_new();
 
-    // Sheet 1: Summary
     const summary: (string | number)[][] = [
       ['รายงานประจำเดือน', monthStr],
       ['ออกโดย', adminName],
@@ -126,7 +147,6 @@ export default function AdminClient({
       ['มาสาย (%)', stats.lateRate],
       ['จำนวนคนมาสาย', stats.lateCount],
       ['ลานอกสถานที่ (ครั้ง)', stats.offsites],
-      ['คำขออนุมัติคงค้าง', pendingList.length],
       [],
       ['เวลาทำการ', `${settings?.work_start} - ${settings?.work_end}`],
       ['Tolerance สาย (นาที)', tolerance],
@@ -136,187 +156,185 @@ export default function AdminClient({
     ws1['!cols'] = [{ wch: 28 }, { wch: 24 }];
     XLSX.utils.book_append_sheet(wb, ws1, 'สรุปภาพรวม');
 
-    // Sheet 2: Daily
-    const dailyRows: (string | number)[][] = [
-      ['วันที่', 'เช็คอินในออฟฟิศ', 'มาสาย', 'นอกสถานที่', 'รวม'],
-      ...dailyData.map((d) => [d.day, d.office, d.late, d.offsite, d.office + d.offsite]),
-    ];
-    const ws2 = XLSX.utils.aoa_to_sheet(dailyRows);
-    ws2['!cols'] = [{ wch: 8 }, { wch: 18 }, { wch: 10 }, { wch: 14 }, { wch: 10 }];
-    XLSX.utils.book_append_sheet(wb, ws2, 'รายวัน');
-
-    // Sheet 3: Per-employee summary
-    const empRows: (string | number)[][] = [
-      ['รหัสพนักงาน', 'ชื่อ', 'ตำแหน่ง', 'วันเช็คอิน', 'สาย (ครั้ง)', 'นอกสถานที่', 'ตรงเวลา (%)'],
-    ];
+    const empRows: (string | number)[][] = [['รหัสพนักงาน', 'ชื่อ', 'สาขา', 'ตำแหน่ง', 'วันเช็คอิน', 'สาย (ครั้ง)', 'นอกสถานที่', 'ตรงเวลา (%)']];
     employees.forEach((e) => {
       const empIns = checkins.filter((c) => c.emp_id === e.emp_id && c.type === 'in');
-      const empLate = empIns.filter((c) => {
-        const d = new Date(c.ts);
-        return d.getHours() * 60 + d.getMinutes() > cutoffMin;
-      }).length;
+      const empLate = empIns.filter((c) => { const d = new Date(c.ts); return d.getHours() * 60 + d.getMinutes() > cutoffMin; }).length;
       const empOffsite = checkins.filter((c) => c.emp_id === e.emp_id && c.type.startsWith('offsite')).length;
       const onTimeP = empIns.length === 0 ? 0 : Math.round(((empIns.length - empLate) / empIns.length) * 100);
-      empRows.push([e.emp_id, e.name, e.role, empIns.length, empLate, empOffsite, onTimeP]);
+      empRows.push([e.emp_id, e.name, e.branch ?? '', e.role, empIns.length, empLate, empOffsite, onTimeP]);
     });
     const ws3 = XLSX.utils.aoa_to_sheet(empRows);
-    ws3['!cols'] = [{ wch: 14 }, { wch: 24 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+    ws3['!cols'] = [{ wch: 14 }, { wch: 24 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
     XLSX.utils.book_append_sheet(wb, ws3, 'รายพนักงาน');
 
-    // Sheet 4: Raw log
-    const logRows = [
-      ['วันที่-เวลา', 'รหัสพนักงาน', 'ประเภท', 'พิกัด', 'สถานที่', 'สถานะ'],
-      ...checkins
-        .sort((a, b) => a.ts.localeCompare(b.ts))
-        .map((c) => [
-          new Date(c.ts).toLocaleString('th-TH'),
-          c.emp_id,
-          c.type,
-          c.lat && c.lng ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}` : '',
-          c.location_note ?? '',
-          c.status,
-        ]),
-    ];
+    const logRows: (string | number)[][] = [['วันที่-เวลา', 'รหัสพนักงาน', 'ชื่อ', 'สาขา', 'ประเภท', 'พิกัด', 'สถานที่ Off-site']];
+    checkins.slice().sort((a, b) => a.ts.localeCompare(b.ts)).forEach((c) => {
+      logRows.push([
+        new Date(c.ts).toLocaleString('th-TH'),
+        c.emp_id, c.employees.name, c.employees.branch ?? '',
+        typeLabel(c.type),
+        c.lat && c.lng ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}` : '',
+        c.location_note ?? '',
+      ]);
+    });
     const ws4 = XLSX.utils.aoa_to_sheet(logRows);
-    ws4['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 14 }, { wch: 26 }, { wch: 30 }, { wch: 12 }];
+    ws4['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 26 }, { wch: 30 }];
     XLSX.utils.book_append_sheet(wb, ws4, 'ประวัติทั้งหมด');
 
     XLSX.writeFile(wb, `รายงาน_${monthStr}_${Date.now()}.xlsx`);
   }
 
   return (
-    <main style={{ maxWidth: 1100, margin: '0 auto', padding: 22 }}>
+    <main style={{ maxWidth: 1100, margin: '0 auto', padding: 18 }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <div className="t-l-3" style={{ fontSize: 12 }}>Sakofah Islamic · Admin · {adminName}</div>
-          <div style={{ fontSize: 22, fontWeight: 600 }}>รายงานประจำเดือน {monthStr}</div>
+          <div style={{ fontSize: 12, color: '#5c5c60' }}>Sakofah Islamic · Admin · {adminName}</div>
+          <div style={{ fontSize: 22, fontWeight: 700 }}>รายงานประจำเดือน {monthStr}</div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <Link href="/checkin" style={{ background: '#fff', color: '#0e0e10', border: '0.5px solid rgba(0,0,0,0.1)', borderRadius: 10, padding: '6px 12px', fontSize: 12, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+          <Link href="/checkin" style={{ background: '#fff', color: C.dark, border: '0.5px solid rgba(0,0,0,0.1)', borderRadius: 10, padding: '7px 12px', fontSize: 12, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <i className="ti ti-home" style={{ fontSize: 13 }} aria-hidden></i>ไปหน้าเช็คอิน
           </Link>
-          <input type="month" defaultValue={monthStr}
-            onChange={(e) => { window.location.href = `/admin?month=${e.target.value}`; }}
+          <input type="month" defaultValue={monthStr} onChange={(e) => { window.location.href = `/admin?month=${e.target.value}`; }}
             style={{ background: '#fff', borderRadius: 10, padding: '6px 12px', border: '0.5px solid rgba(0,0,0,0.1)', fontSize: 12 }} />
-          <button onClick={exportExcel} style={{ background: C.dark, color: C.lime, border: 'none', borderRadius: 10, padding: '6px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={exportExcel} style={{ background: C.dark, color: C.lime, border: 'none', borderRadius: 10, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <i className="ti ti-file-spreadsheet" style={{ fontSize: 14 }} aria-hidden></i>Export Excel
           </button>
         </div>
       </div>
 
-      {/* KPI grid 5 ช่อง */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 14 }}>
+      {/* KPI grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 14 }}>
         <KpiCard label="พนักงาน" value={stats.total} bg={C.purple} textCol="#26215c" />
         <KpiCard label="มาตรงเวลา" value={`${stats.onTimeRate}%`} bg={C.lime} textCol={C.dark} />
-        <KpiCard label="มาสาย" value={`${stats.lateRate}%`} sub={`${stats.lateCount} ครั้ง`} bg={C.peach} textCol="#5c4520" />
-        <KpiCard label="นอกสถานที่" value={stats.offsites} sub="ครั้ง" bg={C.mint} textCol="#04342c" />
-        <KpiCard label="รออนุมัติ" value={pendingList.length} bg={C.dark} textCol={C.lime} dark />
+        <KpiCard label="มาสาย" value={`${stats.lateRate}%`} sub={`${stats.lateCount} ครั้ง`} bg={C.redDeep} textCol="#fff" />
+        <KpiCard label="นอกสถานที่" value={stats.offsites} sub="ครั้ง" bg={C.mintDeep} textCol="#04342c" />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1.4fr) minmax(0,1fr)', gap: 14 }}>
-        {/* Chart card — dark */}
-        <div style={{ background: C.dark, color: '#fff', borderRadius: 18, padding: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, flexWrap: 'wrap', gap: 6 }}>
-            <div style={{ fontSize: 14, fontWeight: 500 }}>เช็คอินรายวัน · {stats.total} คน</div>
-            <div style={{ display: 'flex', gap: 4 }}>
-              <Chip color={C.lime} dark label="ในออฟฟิศ" />
-              <Chip color={C.peachDeep} label="มาสาย" />
-              <Chip color="#7c5cff" label="นอกสถานที่" />
-            </div>
+      {/* Check-in/out table — full width */}
+      <div style={{ background: C.dark, color: '#fff', borderRadius: 18, padding: 16, marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 10 }}>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>ตารางเช็คอิน/เอาท์ · {stats.total} คน</div>
+            <div style={{ fontSize: 11, color: '#8e8e92', marginTop: 2 }}>{stats.checkinDays} วันเช็คอิน</div>
           </div>
-          <div style={{ fontSize: 30, fontWeight: 600 }}>{stats.checkinDays}<span style={{ fontSize: 13, color: '#8e8e92', fontWeight: 400 }}> วันเช็คอิน</span></div>
-          <svg viewBox="0 0 600 140" style={{ width: '100%', height: 160 }}>
-            {dailyData.map((d, i) => {
-              const x = 10 + i * (580 / dailyData.length);
-              const w = (580 / dailyData.length) - 4;
-              const onTimeH = ((d.office - d.late) / maxBar) * 100;
-              const lateH = (d.late / maxBar) * 100;
-              const offH = (d.offsite / maxBar) * 100;
-              let y = 130;
-              return (
-                <g key={i}>
-                  <rect x={x} y={y - onTimeH} width={w} height={onTimeH} fill={C.lime} rx={2} />
-                  <rect x={x} y={y - onTimeH - lateH} width={w} height={lateH} fill={C.peachDeep} rx={2} />
-                  <rect x={x} y={y - onTimeH - lateH - offH} width={w} height={offH} fill="#7c5cff" rx={2} />
-                </g>
-              );
-            })}
-          </svg>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#8e8e92', marginTop: 4 }}>
-            <span>1</span><span>10</span><span>20</span><span>{dailyData.length}</span>
-          </div>
+          <SegmentedControl value={view} onChange={setView} options={[
+            { value: 'daily', label: 'รายวัน' },
+            { value: 'weekly', label: 'รายสัปดาห์' },
+            { value: 'monthly', label: 'รายเดือน' },
+          ]} />
         </div>
 
-        {/* Pending offsite — peach card */}
-        <div style={{ background: C.peach, borderRadius: 18, padding: 14 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: '#412402' }}>รออนุมัติ Off-site</div>
-            <span style={{ fontSize: 11, color: '#854f0b' }}>{pendingList.length} รายการ</span>
-          </div>
-          {pendingList.length === 0 ? (
-            <div style={{ color: '#854f0b', fontSize: 12, padding: 20, textAlign: 'center' }}>ไม่มีคำขอรอ ✓</div>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+          <Legend color={C.lime} label="เช็คอิน" />
+          <Legend color={C.redSoft} label="เช็คเอาท์" />
+          <Legend color="#a89bf0" label="นอกสถานที่" />
+        </div>
+
+        <svg viewBox="0 0 600 140" style={{ width: '100%', height: 160 }}>
+          {chartData.map((d, i) => {
+            const x = 10 + i * (580 / chartData.length);
+            const w = (580 / chartData.length) - 4;
+            const insH = (d.ins / maxBar) * 100;
+            const outsH = (d.outs / maxBar) * 100;
+            const offsH = (d.offs / maxBar) * 100;
+            return (
+              <g key={i}>
+                <rect x={x} y={130 - insH} width={w} height={insH} fill={C.lime} rx={2} />
+                <rect x={x} y={130 - insH - outsH} width={w} height={outsH} fill={C.redSoft} rx={2} />
+                <rect x={x} y={130 - insH - outsH - offsH} width={w} height={offsH} fill="#a89bf0" rx={2} />
+              </g>
+            );
+          })}
+        </svg>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#8e8e92', marginTop: 4 }}>
+          {view === 'daily' && <><span>1</span><span>10</span><span>20</span><span>{chartData.length}</span></>}
+          {view === 'weekly' && chartData.map((d, i) => <span key={i}>{d.label}</span>)}
+          {view === 'monthly' && <span>{chartData[0].label}</span>}
+        </div>
+      </div>
+
+      {/* History table with filters */}
+      <div style={{ background: '#fff', borderRadius: 18, padding: 16, marginBottom: 14, border: '0.5px solid rgba(0,0,0,0.08)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>ประวัติทั้งหมด · {historyRows.length} รายการ</div>
+          <SegmentedControl value={typeFilter} onChange={setTypeFilter} options={[
+            { value: 'all', label: 'ทั้งหมด' },
+            { value: 'in', label: 'เข้า' },
+            { value: 'out', label: 'ออก' },
+            { value: 'offsite', label: 'นอกสถานที่' },
+          ]} light />
+        </div>
+
+        {/* Filter row */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 8, marginBottom: 12 }}>
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ค้นหาชื่อ/รหัส..." style={inputStyle} />
+          <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)} style={inputStyle}>
+            <option value="all">ทุกสาขา</option>
+            {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={inputStyle} />
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={inputStyle} />
+        </div>
+
+        {/* Rows */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 500, overflowY: 'auto' }}>
+          {historyRows.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 30, color: '#5c5c60', fontSize: 12 }}>ไม่พบรายการตามที่กรอง</div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 320, overflowY: 'auto' }}>
-              {pendingList.map((p) => {
-                const isOut = p.type === 'offsite_out';
-                return (
-                  <div key={p.id} style={{ background: '#fff', borderRadius: 12, padding: 10 }}>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
-                      {p.photo_url ? (
-                        <img src={p.photo_url} style={{ width: 48, height: 48, borderRadius: 10, objectFit: 'cover' }} />
-                      ) : (
-                        <div style={{ width: 48, height: 48, borderRadius: 10, background: C.dark, color: C.lime, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600 }}>
-                          {p.employees.name.slice(0, 2)}
-                        </div>
-                      )}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12, fontWeight: 500, display: 'flex', alignItems: 'center', gap: 4 }}>
-                          {p.employees.name}
-                          <span style={{ background: isOut ? '#ff7a3d' : '#7c5cff', color: '#fff', padding: '1px 6px', borderRadius: 999, fontSize: 9, fontWeight: 600 }}>
-                            {isOut ? 'OUT' : 'IN'}
-                          </span>
-                        </div>
-                        <div style={{ fontSize: 10, color: '#5c5c60', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {p.location_note} · {new Date(p.ts).toLocaleString('th-TH', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
+            historyRows.map((c) => {
+              const tInfo = typeInfo(c.type);
+              return (
+                <div key={c.id} style={{ background: '#f4f2ec', borderRadius: 12, padding: 10, display: 'grid', gridTemplateColumns: '46px 1fr auto', gap: 10, alignItems: 'center' }}>
+                  {c.photo_url ? (
+                    <img src={c.photo_url} style={{ width: 46, height: 46, borderRadius: 10, objectFit: 'cover' }} />
+                  ) : (
+                    <div style={{ width: 46, height: 46, borderRadius: 10, background: tInfo.bg, color: tInfo.color, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <i className={`ti ti-${tInfo.icon}`} style={{ fontSize: 22 }} aria-hidden></i>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 4 }}>
-                      <button onClick={() => handleApprove(p.id)} disabled={isPending} style={{ background: C.lime, color: C.dark, border: 'none', borderRadius: 8, padding: '6px', fontSize: 11, fontWeight: 600, cursor: 'pointer' }}>อนุมัติ</button>
-                      <button onClick={() => handleReject(p.id)} disabled={isPending} style={{ background: '#fff', color: '#a32d2d', border: '0.5px solid rgba(163,45,45,0.3)', borderRadius: 8, padding: '6px', fontSize: 11, fontWeight: 500, cursor: 'pointer' }}>ปฏิเสธ</button>
+                  )}
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                      {c.employees.name}
+                      <span style={{ background: tInfo.bg, color: tInfo.color, padding: '1px 7px', borderRadius: 999, fontSize: 10, fontWeight: 600 }}>{tInfo.label}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: '#5c5c60', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {c.emp_id} · {c.employees.branch ?? '-'}{c.location_note ? ` · ${c.location_note}` : ''}
                     </div>
                   </div>
-                );
-              })}
-            </div>
+                  <div style={{ textAlign: 'right', fontSize: 11, color: '#5c5c60' }}>
+                    <div>{new Date(c.ts).toLocaleDateString('th-TH', { day: '2-digit', month: 'short' })}</div>
+                    <div style={{ fontWeight: 600, color: '#0e0e10' }}>{new Date(c.ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</div>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       </div>
 
-      {/* Employee summary — purple card */}
-      <div style={{ background: C.purple, borderRadius: 18, padding: 16, marginTop: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: '#26215c' }}>สรุปพนักงาน {employees.length} คน</div>
-          <span style={{ fontSize: 11, color: '#3c3489' }}>เพิ่ม/แก้ไขใน Supabase Studio → Table Editor</span>
+      {/* Employee summary — white */}
+      <div style={{ background: '#fff', borderRadius: 18, padding: 16, border: '0.5px solid rgba(0,0,0,0.08)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>สรุปพนักงาน {employees.length} คน</div>
+          <span style={{ fontSize: 11, color: '#5c5c60' }}>เพิ่ม/แก้ไขใน Supabase Studio → Table Editor</span>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
           {employees.map((e) => {
             const empIns = checkins.filter((c) => c.emp_id === e.emp_id && c.type === 'in');
-            const empLate = empIns.filter((c) => {
-              const d = new Date(c.ts);
-              return d.getHours() * 60 + d.getMinutes() > cutoffMin;
-            }).length;
+            const empLate = empIns.filter((c) => { const d = new Date(c.ts); return d.getHours() * 60 + d.getMinutes() > cutoffMin; }).length;
             return (
-              <div key={e.emp_id} style={{ background: '#fff', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div key={e.emp_id} style={{ background: '#f4f2ec', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: e.role === 'admin' ? C.dark : C.lime, color: e.role === 'admin' ? C.lime : C.dark, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>
                   {e.name.slice(0, 2)}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.name}</div>
                   <div style={{ fontSize: 10, color: '#5c5c60' }}>
-                    {e.emp_id} · {empIns.length} วัน
-                    {empLate > 0 && <span style={{ color: '#ba7517' }}> · สาย {empLate}</span>}
+                    {e.emp_id} · {e.branch ?? '-'} · {empIns.length} วัน
+                    {empLate > 0 && <span style={{ color: '#a32d2d' }}> · สาย {empLate}</span>}
                   </div>
                 </div>
               </div>
@@ -328,10 +346,14 @@ export default function AdminClient({
   );
 }
 
-function KpiCard({ label, value, sub, bg, textCol, dark = false }: { label: string; value: number | string; sub?: string; bg: string; textCol: string; dark?: boolean }) {
+const inputStyle: React.CSSProperties = {
+  background: '#f4f2ec', border: '0.5px solid rgba(0,0,0,0.08)', borderRadius: 10, padding: '8px 10px', fontSize: 12, color: '#0e0e10', outline: 'none', minWidth: 0,
+};
+
+function KpiCard({ label, value, sub, bg, textCol }: { label: string; value: number | string; sub?: string; bg: string; textCol: string }) {
   return (
     <div style={{ background: bg, color: textCol, borderRadius: 14, padding: 12 }}>
-      <div style={{ fontSize: 11, opacity: dark ? 1 : 0.7, color: dark ? '#c9c9cc' : 'inherit' }}>{label}</div>
+      <div style={{ fontSize: 11, opacity: 0.75 }}>{label}</div>
       <div style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.2 }}>
         {value}{sub && <span style={{ fontSize: 11, fontWeight: 400, opacity: 0.7 }}> {sub}</span>}
       </div>
@@ -339,10 +361,38 @@ function KpiCard({ label, value, sub, bg, textCol, dark = false }: { label: stri
   );
 }
 
-function Chip({ color, label, dark }: { color: string; label: string; dark?: boolean }) {
+function SegmentedControl<T extends string>({ value, onChange, options, light }: { value: T; onChange: (v: T) => void; options: { value: T; label: string }[]; light?: boolean }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: dark ? color : 'transparent', color: dark ? C.dark : '#fff', border: dark ? 'none' : '0.5px solid #2a2a2d', borderRadius: 999, padding: '3px 8px', fontSize: 10, fontWeight: 500 }}>
-      <span style={{ display: 'inline-block', width: 6, height: 6, background: color, borderRadius: 999 }} />{label}
+    <div style={{ display: 'inline-flex', background: light ? '#f4f2ec' : '#1a1a1c', borderRadius: 999, padding: 3, gap: 2 }}>
+      {options.map((o) => {
+        const active = o.value === value;
+        return (
+          <button key={o.value} onClick={() => onChange(o.value)} style={{
+            background: active ? (light ? '#0e0e10' : '#d6f26b') : 'transparent',
+            color: active ? (light ? '#d6f26b' : '#0e0e10') : (light ? '#5c5c60' : '#c9c9cc'),
+            border: 'none', borderRadius: 999, padding: '5px 11px', fontSize: 11, fontWeight: 600, cursor: 'pointer',
+          }}>{o.label}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+function Legend({ color, label }: { color: string; label: string }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#c9c9cc' }}>
+      <span style={{ width: 8, height: 8, background: color, borderRadius: 2 }} />{label}
     </span>
   );
+}
+
+function typeLabel(t: string) {
+  return t === 'in' ? 'เช็คอิน' : t === 'out' ? 'เช็คเอาท์' : t === 'offsite_in' ? 'นอกสถานที่ (เข้า)' : 'นอกสถานที่ (ออก)';
+}
+
+function typeInfo(t: string) {
+  if (t === 'in') return { label: 'เข้า', icon: 'login-2', bg: '#d6f26b', color: '#0e0e10' };
+  if (t === 'out') return { label: 'ออก', icon: 'logout-2', bg: '#ff9d9d', color: '#501313' };
+  if (t === 'offsite_in') return { label: 'นอก·เข้า', icon: 'map-pin-up', bg: '#a89bf0', color: '#26215c' };
+  return { label: 'นอก·ออก', icon: 'map-pin-down', bg: '#f5a85c', color: '#5c4520' };
 }

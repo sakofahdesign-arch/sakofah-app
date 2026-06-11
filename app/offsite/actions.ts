@@ -16,8 +16,22 @@ export async function submitOffsite(formData: FormData) {
 
   if (!emp || !emp.active) return { error: 'ไม่พบข้อมูลพนักงาน' };
 
-  const direction = (formData.get('direction') as string) ?? 'in';
-  const type = direction === 'out' ? 'offsite_out' : 'offsite_in';
+  // Auto-detect direction from today's checkins
+  const today = new Date().toISOString().slice(0, 10);
+  const { data: todays } = await supabase
+    .from('checkins')
+    .select('type')
+    .eq('emp_id', emp.emp_id)
+    .gte('ts', `${today}T00:00:00`)
+    .lte('ts', `${today}T23:59:59`);
+
+  const types = (todays ?? []).map((r) => r.type);
+  const hasIn = types.includes('in') || types.includes('offsite_in');
+  const hasOut = types.includes('out') || types.includes('offsite_out');
+
+  if (hasOut) return { error: 'วันนี้ลงเวลาออกครบแล้ว' };
+
+  const type = hasIn ? 'offsite_out' : 'offsite_in';
 
   const photo = formData.get('photo') as File;
   const lat = parseFloat(formData.get('lat') as string);
@@ -43,11 +57,11 @@ export async function submitOffsite(formData: FormData) {
     lat, lng,
     photo_url: pub.publicUrl,
     location_note: location,
-    status: 'pending',
+    status: 'approved',
   });
 
   if (error) return { error: error.message };
 
   revalidatePath('/checkin');
-  return { ok: true };
+  return { ok: true, type };
 }
