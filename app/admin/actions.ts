@@ -16,19 +16,40 @@ async function requireAdmin() {
   return supabase;
 }
 
-export async function approveOffsite(id: string) {
+export async function approveDeviceRequest(id: string) {
   const supabase = await requireAdmin();
   if (!supabase) return { error: 'ไม่มีสิทธิ์' };
-  const { error } = await supabase.from('checkins').update({ status: 'approved' }).eq('id', id);
+
+  const { data: req } = await supabase
+    .from('device_requests')
+    .select('emp_id, new_device')
+    .eq('id', id)
+    .single();
+  if (!req) return { error: 'ไม่พบคำขอ' };
+
+  const { error: updEmp } = await supabase
+    .from('employees')
+    .update({ device_id: req.new_device })
+    .eq('emp_id', req.emp_id);
+  if (updEmp) return { error: updEmp.message };
+
+  const { error } = await supabase
+    .from('device_requests')
+    .update({ status: 'approved', resolved_at: new Date().toISOString() })
+    .eq('id', id);
   if (error) return { error: error.message };
+
   revalidatePath('/admin');
   return { ok: true };
 }
 
-export async function rejectOffsite(id: string) {
+export async function rejectDeviceRequest(id: string) {
   const supabase = await requireAdmin();
   if (!supabase) return { error: 'ไม่มีสิทธิ์' };
-  const { error } = await supabase.from('checkins').update({ status: 'rejected' }).eq('id', id);
+  const { error } = await supabase
+    .from('device_requests')
+    .update({ status: 'rejected', resolved_at: new Date().toISOString() })
+    .eq('id', id);
   if (error) return { error: error.message };
   revalidatePath('/admin');
   return { ok: true };

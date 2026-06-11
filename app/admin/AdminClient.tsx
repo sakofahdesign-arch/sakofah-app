@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import * as XLSX from 'xlsx';
+import { approveDeviceRequest, rejectDeviceRequest } from './actions';
 
-type Employee = { emp_id: string; name: string; role: string; active: boolean; branch: string | null };
+type Employee = { emp_id: string; name: string; role: string; active: boolean; branch: string | null; device_id: string | null };
 type Checkin = {
   id: string;
   emp_id: string;
@@ -15,6 +16,16 @@ type Checkin = {
   photo_url: string | null;
   location_note: string | null;
   status: string;
+  employees: { name: string; branch: string | null };
+};
+type DeviceRequest = {
+  id: string;
+  emp_id: string;
+  old_device: string | null;
+  new_device: string;
+  reason: string | null;
+  status: string;
+  created_at: string;
   employees: { name: string; branch: string | null };
 };
 type Settings = {
@@ -39,13 +50,14 @@ type View = 'daily' | 'weekly' | 'monthly';
 type TypeFilter = 'all' | 'in' | 'out' | 'offsite';
 
 export default function AdminClient({
-  adminName, monthStr, employees, checkins, settings,
+  adminName, monthStr, employees, checkins, settings, deviceRequests,
 }: {
   adminName: string;
   monthStr: string;
   employees: Employee[];
   checkins: Checkin[];
   settings: Settings;
+  deviceRequests: DeviceRequest[];
 }) {
   const [view, setView] = useState<View>('daily');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -53,6 +65,21 @@ export default function AdminClient({
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [search, setSearch] = useState('');
+  const [devReqs, setDevReqs] = useState(deviceRequests);
+  const [isPending, startTransition] = useTransition();
+
+  function handleApproveDevice(id: string) {
+    startTransition(async () => {
+      const res = await approveDeviceRequest(id);
+      if (!res.error) setDevReqs((list) => list.filter((r) => r.id !== id));
+    });
+  }
+  function handleRejectDevice(id: string) {
+    startTransition(async () => {
+      const res = await rejectDeviceRequest(id);
+      if (!res.error) setDevReqs((list) => list.filter((r) => r.id !== id));
+    });
+  }
 
   const workStartHr = parseInt(settings?.work_start?.slice(0, 2) ?? '8', 10);
   const workStartMin = parseInt(settings?.work_start?.slice(3, 5) ?? '20', 10);
@@ -314,6 +341,70 @@ export default function AdminClient({
           )}
         </div>
       </div>
+
+      {/* Device change requests */}
+      {devReqs.length > 0 && (
+        <div style={{ background: '#fcdfb1', borderRadius: 18, padding: 16, marginBottom: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 14, fontWeight: 700, color: '#412402' }}>
+                <i className="ti ti-device-mobile-cog" style={{ fontSize: 16, marginRight: 6, verticalAlign: -3 }} aria-hidden></i>
+                คำขอเปลี่ยนเครื่อง
+              </div>
+              <div style={{ fontSize: 11, color: '#854f0b' }}>อนุมัติเพื่อผูกเครื่องใหม่กับพนักงาน</div>
+            </div>
+            <span style={{ background: '#0e0e10', color: '#d6f26b', borderRadius: 999, padding: '4px 10px', fontSize: 11, fontWeight: 600 }}>{devReqs.length} รายการ</span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 10 }}>
+            {devReqs.map((r) => (
+              <div key={r.id} style={{ background: '#fff', borderRadius: 14, padding: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: 10, background: C.lime, color: C.dark, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700 }}>
+                    {r.employees.name.slice(0, 2)}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{r.employees.name}</div>
+                    <div style={{ fontSize: 11, color: '#5c5c60' }}>{r.emp_id} · {r.employees.branch ?? '-'}</div>
+                  </div>
+                  <span style={{ fontSize: 10, color: '#5c5c60' }}>{new Date(r.created_at).toLocaleDateString('th-TH', { day: '2-digit', month: 'short' })}</span>
+                </div>
+
+                <div style={{ background: '#f4f2ec', borderRadius: 10, padding: 10, marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 11 }}>
+                    <div>
+                      <div style={{ color: '#5c5c60', fontSize: 10 }}>เครื่องเดิม</div>
+                      <div style={{ color: '#0e0e10', wordBreak: 'break-all' }}>{r.old_device ?? '— ไม่มีข้อมูล —'}</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11 }}>
+                    <div style={{ color: '#0f6e56', fontSize: 10 }}>เครื่องใหม่</div>
+                    <div style={{ color: '#04342c', fontWeight: 500, wordBreak: 'break-all' }}>{r.new_device}</div>
+                  </div>
+                </div>
+
+                {r.reason && (
+                  <div style={{ background: '#f4f2ec', borderRadius: 10, padding: 10, marginBottom: 10, fontSize: 11 }}>
+                    <div style={{ color: '#5c5c60', fontSize: 10, marginBottom: 2 }}>เหตุผล</div>
+                    <div style={{ color: '#0e0e10' }}>{r.reason}</div>
+                  </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                  <button onClick={() => handleApproveDevice(r.id)} disabled={isPending}
+                    style={{ background: C.lime, color: C.dark, border: 'none', borderRadius: 10, padding: '8px', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    <i className="ti ti-check" style={{ fontSize: 13, marginRight: 4 }} aria-hidden></i>อนุมัติ
+                  </button>
+                  <button onClick={() => handleRejectDevice(r.id)} disabled={isPending}
+                    style={{ background: '#fff', color: '#a32d2d', border: '0.5px solid rgba(163,45,45,0.3)', borderRadius: 10, padding: '8px', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+                    <i className="ti ti-x" style={{ fontSize: 13, marginRight: 4 }} aria-hidden></i>ปฏิเสธ
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Employee summary — white */}
       <div style={{ background: '#fff', borderRadius: 18, padding: 16, border: '0.5px solid rgba(0,0,0,0.08)' }}>
