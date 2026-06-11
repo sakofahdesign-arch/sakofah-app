@@ -246,16 +246,16 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
       ) : (
         <Link href="/offsite" style={{ textDecoration: 'none', display: 'block' }}>
           <div style={{ background: '#f5a85c', borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 46, height: 46, borderRadius: 14, background: 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <i className="ti ti-map-pin-plus" style={{ fontSize: 24, color: '#fff' }} aria-hidden></i>
+            <div style={{ width: 46, height: 46, borderRadius: 14, background: 'rgba(0,0,0,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <i className="ti ti-map-pin-plus" style={{ fontSize: 24, color: '#0e0e10' }} aria-hidden></i>
             </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>ลงเวลานอกสถานที่</div>
-              <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.9)' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: '#0e0e10' }}>ลงเวลานอกสถานที่</div>
+              <div style={{ fontSize: 11, color: '#0e0e10', opacity: 0.75 }}>
                 {hasCheckedIn ? 'ออกนอกสถานที่' : 'เข้านอกสถานที่'}
               </div>
             </div>
-            <i className="ti ti-chevron-right" style={{ fontSize: 18, color: '#fff' }} aria-hidden></i>
+            <i className="ti ti-chevron-right" style={{ fontSize: 18, color: '#0e0e10' }} aria-hidden></i>
           </div>
         </Link>
       )}
