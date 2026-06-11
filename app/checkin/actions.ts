@@ -7,6 +7,7 @@ type CheckinInput = {
   type: 'in' | 'out';
   lat: number;
   lng: number;
+  device_id: string;
   wifi_ssid?: string;
 };
 
@@ -26,14 +27,29 @@ export async function submitCheckin(input: CheckinInput) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'ไม่ได้เข้าสู่ระบบ' };
 
+  if (!input.device_id) return { error: 'ไม่พบรหัสอุปกรณ์ — โปรดรีเฟรชหน้า' };
+
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, active')
+    .select('emp_id, active, device_id')
     .eq('id', user.id)
     .single();
 
   if (!emp) return { error: 'ไม่พบข้อมูลพนักงาน' };
   if (!emp.active) return { error: 'บัญชีถูกระงับ' };
+
+  // Device binding logic
+  if (!emp.device_id) {
+    // First time use — auto-bind this device
+    const { error: bindErr } = await supabase
+      .from('employees')
+      .update({ device_id: input.device_id })
+      .eq('emp_id', emp.emp_id);
+    if (bindErr) return { error: 'ผูกอุปกรณ์ไม่สำเร็จ: ' + bindErr.message };
+  } else if (emp.device_id !== input.device_id) {
+    // Device mismatch — block
+    return { error: 'DEVICE_MISMATCH' };
+  }
 
   const { data: settings } = await supabase
     .from('settings')
@@ -80,6 +96,7 @@ export async function submitCheckin(input: CheckinInput) {
     type: input.type,
     lat: input.lat,
     lng: input.lng,
+    device_id: input.device_id,
     wifi_ssid: input.wifi_ssid ?? null,
     status: 'approved',
   });

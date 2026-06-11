@@ -10,11 +10,20 @@ export async function submitOffsite(formData: FormData) {
 
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, active')
+    .select('emp_id, active, device_id')
     .eq('id', user.id)
     .single();
 
   if (!emp || !emp.active) return { error: 'ไม่พบข้อมูลพนักงาน' };
+
+  const deviceId = (formData.get('device_id') as string) ?? '';
+  if (!deviceId) return { error: 'ไม่พบรหัสอุปกรณ์' };
+
+  if (!emp.device_id) {
+    await supabase.from('employees').update({ device_id: deviceId }).eq('emp_id', emp.emp_id);
+  } else if (emp.device_id !== deviceId) {
+    return { error: 'DEVICE_MISMATCH' };
+  }
 
   // Auto-detect direction from today's checkins
   const today = new Date().toISOString().slice(0, 10);

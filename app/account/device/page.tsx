@@ -1,15 +1,22 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
+import { getOrCreateDeviceId, getDeviceLabel } from '@/lib/device';
 
 export default function DeviceRequestPage() {
   const [reason, setReason] = useState('');
-  const [newDevice, setNewDevice] = useState(typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 80) : '');
+  const [deviceLabel, setDeviceLabel] = useState('');
+  const [deviceId, setDeviceId] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    setDeviceId(getOrCreateDeviceId());
+    setDeviceLabel(getDeviceLabel());
+  }, []);
 
   function submit() {
     setErr(null);
@@ -25,8 +32,8 @@ export default function DeviceRequestPage() {
       const { error } = await supabase.from('device_requests').insert({
         emp_id: emp.emp_id,
         old_device: emp.device_id,
-        new_device: newDevice,
-        reason,
+        new_device: deviceId,
+        reason: `[${deviceLabel}] ${reason}`,
         status: 'pending',
       });
       if (error) { setErr(error.message); return; }
@@ -55,17 +62,21 @@ export default function DeviceRequestPage() {
         </div>
       ) : (
         <div style={{ background: '#0e0e10', borderRadius: 18, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <div>
-            <div style={{ fontSize: 11, color: '#8e8e92', marginBottom: 6 }}>เครื่องใหม่ (อุปกรณ์ที่ใช้อยู่นี้)</div>
-            <textarea value={newDevice} onChange={(e) => setNewDevice(e.target.value)} rows={2}
-              style={{ width: '100%', background: '#1a1a1c', border: '0.5px solid #2a2a2d', color: '#fff', borderRadius: 12, padding: '10px 12px', fontSize: 12, outline: 'none', resize: 'none' }} />
+          <div style={{ background: '#1a1a1c', border: '0.5px solid #2a2a2d', borderRadius: 12, padding: '10px 12px' }}>
+            <div style={{ fontSize: 11, color: '#8e8e92', marginBottom: 4 }}>เครื่องใหม่ (อุปกรณ์ที่กำลังใช้)</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>
+              <i className="ti ti-device-mobile" style={{ fontSize: 16, marginRight: 6, verticalAlign: -3, color: '#d6f26b' }} aria-hidden></i>
+              {deviceLabel}
+            </div>
+            <div style={{ fontSize: 10, color: '#5c5c60', fontFamily: 'monospace', marginTop: 4 }}>{deviceId.slice(0, 13)}…</div>
           </div>
+
           <div>
             <div style={{ fontSize: 11, color: '#8e8e92', marginBottom: 6 }}>
               เหตุผล <span style={{ color: '#ff5b5b' }}>*</span>
             </div>
             <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
-              placeholder="เช่น เครื่องเก่าจอแตก / เปลี่ยนเครื่องใหม่"
+              placeholder="เช่น เครื่องเก่าจอแตก / ซื้อเครื่องใหม่"
               style={{ width: '100%', background: '#1a1a1c', border: '0.5px solid #2a2a2d', color: '#fff', borderRadius: 12, padding: '10px 12px', fontSize: 13, outline: 'none', resize: 'none' }} />
           </div>
 

@@ -9,7 +9,7 @@ export default async function CheckinPage() {
 
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, name, role')
+    .select('emp_id, name, role, device_id')
     .eq('id', user.id)
     .single();
 
@@ -45,6 +45,7 @@ export default async function CheckinPage() {
       empName={emp.name}
       empId={emp.emp_id}
       role={emp.role}
+      registeredDeviceId={emp.device_id}
       todayCheckins={todayCheckins ?? []}
       settings={settings}
     />

@@ -4,6 +4,7 @@ import { Suspense, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getOrCreateDeviceId } from '@/lib/device';
 import { submitOffsite } from './actions';
 
 export default function OffsitePage() {
@@ -157,10 +158,12 @@ function OffsiteInner() {
     fd.append('lat', String(coords.lat));
     fd.append('lng', String(coords.lng));
     fd.append('location', location);
+    fd.append('device_id', getOrCreateDeviceId());
 
     startTransition(async () => {
       const res = await submitOffsite(fd);
-      if (res?.error) setErr(res.error);
+      if (res?.error === 'DEVICE_MISMATCH') setErr('เครื่องนี้ไม่ตรงกับที่ลงทะเบียน — โปรดขอเปลี่ยนเครื่อง');
+      else if (res?.error) setErr(res.error);
       else router.push('/checkin');
     });
   }
