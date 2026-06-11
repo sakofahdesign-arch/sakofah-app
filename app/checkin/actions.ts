@@ -62,13 +62,16 @@ export async function submitCheckin(input: CheckinInput) {
     .lte('ts', `${today}T23:59:59`);
 
   const types = (todays ?? []).map((r) => r.type);
-  if (input.type === 'in' && types.includes('in')) {
-    return { error: 'วันนี้คุณเช็คอินไปแล้ว' };
+  const hasAnyIn = types.includes('in') || types.includes('offsite_in');
+  const hasAnyOut = types.includes('out') || types.includes('offsite_out');
+
+  if (input.type === 'in' && hasAnyIn) {
+    return { error: 'วันนี้คุณเช็คอินไปแล้ว (รวมเช็คอินนอกสถานที่)' };
   }
-  if (input.type === 'out' && !types.includes('in')) {
+  if (input.type === 'out' && !hasAnyIn) {
     return { error: 'กรุณาเช็คอินก่อน' };
   }
-  if (input.type === 'out' && types.includes('out')) {
+  if (input.type === 'out' && hasAnyOut) {
     return { error: 'วันนี้คุณเช็คเอาท์ไปแล้ว' };
   }
 
