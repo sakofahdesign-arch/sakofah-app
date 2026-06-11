@@ -16,6 +16,9 @@ export async function submitOffsite(formData: FormData) {
 
   if (!emp || !emp.active) return { error: 'ไม่พบข้อมูลพนักงาน' };
 
+  const direction = (formData.get('direction') as string) ?? 'in';
+  const type = direction === 'out' ? 'offsite_out' : 'offsite_in';
+
   const photo = formData.get('photo') as File;
   const lat = parseFloat(formData.get('lat') as string);
   const lng = parseFloat(formData.get('lng') as string);
@@ -36,7 +39,7 @@ export async function submitOffsite(formData: FormData) {
 
   const { error } = await supabase.from('checkins').insert({
     emp_id: emp.emp_id,
-    type: 'offsite_in',
+    type,
     lat, lng,
     photo_url: pub.publicUrl,
     location_note: location,
