@@ -238,7 +238,7 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
             <i className="ti ti-map-pin-plus" style={{ fontSize: 24, color: '#fff' }} aria-hidden></i>
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>ลานอกสถานที่</div>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#fff' }}>ลงเวลานอกสถานที่</div>
             <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.9)' }}>
               {hasCheckedOut ? 'วันนี้ลงเวลาครบแล้ว' : hasCheckedIn ? 'ออกนอกสถานที่' : 'เข้านอกสถานที่'}
             </div>

@@ -173,7 +173,7 @@ export default function AdminClient({
       ['มาตรงเวลา (%)', stats.onTimeRate],
       ['มาสาย (%)', stats.lateRate],
       ['จำนวนคนมาสาย', stats.lateCount],
-      ['ลานอกสถานที่ (ครั้ง)', stats.offsites],
+      ['ลงเวลานอกสถานที่ (ครั้ง)', stats.offsites],
       [],
       ['เวลาทำการ', `${settings?.work_start} - ${settings?.work_end}`],
       ['Tolerance สาย (นาที)', tolerance],

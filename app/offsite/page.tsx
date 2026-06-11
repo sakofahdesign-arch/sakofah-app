@@ -178,7 +178,7 @@ function OffsiteInner() {
       </Link>
 
       <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 11, color: '#5c5c60' }}>โหมดลานอกสถานที่</div>
+        <div style={{ fontSize: 11, color: '#5c5c60' }}>โหมดลงเวลานอกสถานที่</div>
         <div style={{ fontSize: 22, fontWeight: 700, color: dirColor === '#d6f26b' ? '#4a6b00' : '#a32d2d' }}>
           <i className={`ti ti-${dirIcon}`} style={{ fontSize: 22, verticalAlign: -3, marginRight: 6 }} aria-hidden></i>
           {dirLabel}
