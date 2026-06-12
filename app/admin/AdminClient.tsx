@@ -70,6 +70,7 @@ export default function AdminClient({
   const [devReqs, setDevReqs] = useState(deviceRequests);
   const [isPending, startTransition] = useTransition();
   const [liveNotice, setLiveNotice] = useState<string | null>(null);
+  const [rtStatus, setRtStatus] = useState<'connecting' | 'live' | 'error'>('connecting');
   const router = useRouter();
 
   // sync state when server props change (after router.refresh())
@@ -81,16 +82,23 @@ export default function AdminClient({
     const channel = supabase
       .channel('admin-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'device_requests' }, (payload) => {
+        console.log('[realtime] device_requests', payload);
         if (payload.eventType === 'INSERT') setLiveNotice('🔔 มีคำขอเปลี่ยนเครื่องใหม่');
+        else setLiveNotice('📝 คำขอเปลี่ยนเครื่องอัปเดต');
         router.refresh();
         setTimeout(() => setLiveNotice(null), 4000);
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'checkins' }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'checkins' }, (payload) => {
+        console.log('[realtime] checkin', payload);
         setLiveNotice('🟢 มีการเช็คอิน/เอาท์ใหม่');
         router.refresh();
         setTimeout(() => setLiveNotice(null), 3000);
       })
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[realtime] subscription status:', status);
+        if (status === 'SUBSCRIBED') setRtStatus('live');
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') setRtStatus('error');
+      });
     return () => { supabase.removeChannel(channel); };
   }, [router]);
 
@@ -266,7 +274,19 @@ export default function AdminClient({
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <div style={{ fontSize: 12, color: '#5c5c60' }}>Sakofah Islamic · Admin · {adminName}</div>
+          <div style={{ fontSize: 12, color: '#5c5c60', display: 'flex', alignItems: 'center', gap: 6 }}>
+            Sakofah Islamic · Admin · {adminName}
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              fontSize: 10, fontWeight: 600,
+              background: rtStatus === 'live' ? 'rgba(15,110,86,0.15)' : rtStatus === 'error' ? 'rgba(163,45,45,0.15)' : 'rgba(133,79,11,0.15)',
+              color: rtStatus === 'live' ? '#0f6e56' : rtStatus === 'error' ? '#a32d2d' : '#854f0b',
+              padding: '2px 8px', borderRadius: 999,
+            }}>
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: rtStatus === 'live' ? '#1d9e75' : rtStatus === 'error' ? '#a32d2d' : '#ba7517' }} />
+              {rtStatus === 'live' ? 'LIVE' : rtStatus === 'error' ? 'OFFLINE' : 'CONNECTING'}
+            </span>
+          </div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>รายงานประจำเดือน {monthStr}</div>
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
