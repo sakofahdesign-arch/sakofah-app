@@ -48,7 +48,7 @@ function earlyMin(ts: string, workEnd: string): number {
 const HOLD_DURATION = 1000; // 1 วินาที
 
 export default function CheckinClient({ empName, empId, role, registeredDeviceId, todayCheckins, settings }: Props) {
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState<Date | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
@@ -61,6 +61,7 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
   const holdStart = useRef<number>(0);
 
   useEffect(() => {
+    setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
@@ -144,7 +145,8 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
       } else {
         const ws = settings?.work_start ?? '08:20';
         const we = settings?.work_end ?? '16:30';
-        const nowMin = now.getHours() * 60 + now.getMinutes();
+        const t = now ?? new Date();
+        const nowMin = t.getHours() * 60 + t.getMinutes();
         let extra = '';
         if (type === 'in') {
           const late = Math.max(0, nowMin - timeToMin(ws));
@@ -158,8 +160,8 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
     });
   }
 
-  const timeStr = now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' });
-  const dateStr = now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+  const timeStr = now ? now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '--:--';
+  const dateStr = now ? now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }) : '';
   const workDays = settings?.work_days === 'MTWTF' ? 'จ–ศ' : 'ทุกวัน';
 
   // GPS chip styling — black bg with lime border (in range) or red border (out of range)

@@ -23,7 +23,7 @@ function OffsiteInner() {
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [now, setNow] = useState(new Date());
+  const [now, setNow] = useState<Date | null>(null);
   const [location, setLocation] = useState('');
   const [direction, setDirection] = useState<'in' | 'out'>('in');
   const [err, setErr] = useState<string | null>(null);
@@ -50,6 +50,7 @@ function OffsiteInner() {
   }, []);
 
   useEffect(() => {
+    setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
@@ -87,7 +88,7 @@ function OffsiteInner() {
   }
 
   function takePhoto() {
-    if (!videoRef.current || !canvasRef.current || !coords) {
+    if (!videoRef.current || !canvasRef.current || !coords || !now) {
       setErr('กรุณารอ GPS ตอบกลับก่อน');
       return;
     }
@@ -251,11 +252,11 @@ function OffsiteInner() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
         <div style={{ background: '#1a1a1c', border: '0.5px solid #2a2a2d', borderRadius: 14, padding: '10px 12px' }}>
           <div style={{ fontSize: 11, color: '#8e8e92' }}>วันที่</div>
-          <div style={{ fontSize: 12, color: '#fff' }}>{now.toLocaleDateString('th-TH')}</div>
+          <div style={{ fontSize: 12, color: '#fff' }}>{now ? now.toLocaleDateString('th-TH') : '--/--/----'}</div>
         </div>
         <div style={{ background: '#1a1a1c', border: '0.5px solid #2a2a2d', borderRadius: 14, padding: '10px 12px' }}>
           <div style={{ fontSize: 11, color: '#8e8e92' }}>เวลา</div>
-          <div style={{ fontSize: 12, fontWeight: 600, color: '#d6f26b' }}>{now.toLocaleTimeString('th-TH')}</div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#d6f26b' }}>{now ? now.toLocaleTimeString('th-TH') : '--:--:--'}</div>
         </div>
       </div>
 
