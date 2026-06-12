@@ -1,8 +1,10 @@
 'use client';
 
-import { useMemo, useState, useTransition } from 'react';
+import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
+import { createClient } from '@/lib/supabase/client';
 import { approveDeviceRequest, rejectDeviceRequest } from './actions';
 
 type Employee = { emp_id: string; name: string; role: string; active: boolean; branch: string | null; device_id: string | null };
@@ -67,6 +69,30 @@ export default function AdminClient({
   const [search, setSearch] = useState('');
   const [devReqs, setDevReqs] = useState(deviceRequests);
   const [isPending, startTransition] = useTransition();
+  const [liveNotice, setLiveNotice] = useState<string | null>(null);
+  const router = useRouter();
+
+  // sync state when server props change (after router.refresh())
+  useEffect(() => { setDevReqs(deviceRequests); }, [deviceRequests]);
+
+  // Realtime — subscribe to new device requests + checkins
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel('admin-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'device_requests' }, (payload) => {
+        if (payload.eventType === 'INSERT') setLiveNotice('🔔 มีคำขอเปลี่ยนเครื่องใหม่');
+        router.refresh();
+        setTimeout(() => setLiveNotice(null), 4000);
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'checkins' }, () => {
+        setLiveNotice('🟢 มีการเช็คอิน/เอาท์ใหม่');
+        router.refresh();
+        setTimeout(() => setLiveNotice(null), 3000);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [router]);
 
   function handleApproveDevice(id: string) {
     startTransition(async () => {
@@ -225,6 +251,18 @@ export default function AdminClient({
 
   return (
     <main style={{ maxWidth: 1100, margin: '0 auto', padding: 18 }}>
+      {/* Live notice */}
+      {liveNotice && (
+        <div style={{
+          position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)',
+          background: '#0e0e10', color: '#d6f26b',
+          padding: '10px 18px', borderRadius: 999, fontSize: 13, fontWeight: 600,
+          boxShadow: '0 8px 20px rgba(0,0,0,0.18)', zIndex: 100,
+          animation: 'pop-in 0.2s ease-out',
+        }}>{liveNotice}</div>
+      )}
+      <style>{`@keyframes pop-in { from { opacity: 0; transform: translateX(-50%) translateY(-8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }`}</style>
+
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
         <div>
