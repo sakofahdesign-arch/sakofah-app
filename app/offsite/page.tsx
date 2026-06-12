@@ -243,7 +243,7 @@ function OffsiteInner() {
         <input
           value={location}
           onChange={(e) => setLocation(e.target.value)}
-          placeholder="เช่น โรงเรียนบ้านตันหยง · ปัตตานี"
+          placeholder="เช่น ธนาคาร หรือกำลังเดินทาง"
           required
           style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: 13, width: '100%', outline: 'none', marginTop: 2 }}
         />
