@@ -31,7 +31,7 @@ export async function submitCheckin(input: CheckinInput) {
 
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, active, device_id')
+    .select('emp_id, active, device_id, branch')
     .eq('id', user.id)
     .single();
 
@@ -40,32 +40,51 @@ export async function submitCheckin(input: CheckinInput) {
 
   // Device binding logic
   if (!emp.device_id) {
-    // First time use — auto-bind this device
     const { error: bindErr } = await supabase
       .from('employees')
       .update({ device_id: input.device_id })
       .eq('emp_id', emp.emp_id);
     if (bindErr) return { error: 'ผูกอุปกรณ์ไม่สำเร็จ: ' + bindErr.message };
   } else if (emp.device_id !== input.device_id) {
-    // Device mismatch — block
     return { error: 'DEVICE_MISMATCH' };
   }
 
-  const { data: settings } = await supabase
-    .from('settings')
-    .select('*')
-    .single();
+  // GPS check — ใช้พิกัดของสาขาที่พนักงานสังกัด (fallback เป็น settings global)
+  let officeLat: number | null = null;
+  let officeLng: number | null = null;
+  let radius: number | null = null;
+  let scopeLabel = 'ออฟฟิศ';
 
-  if (!settings) return { error: 'ไม่พบการตั้งค่าระบบ' };
+  if (emp.branch) {
+    const { data: branch } = await supabase
+      .from('branches')
+      .select('lat, lng, radius_m')
+      .eq('name', emp.branch)
+      .single();
+    if (branch) {
+      officeLat = branch.lat;
+      officeLng = branch.lng;
+      radius = branch.radius_m;
+      scopeLabel = emp.branch;
+    }
+  }
 
-  const dist = distanceMeters(
-    input.lat, input.lng,
-    settings.office_lat, settings.office_lng
-  );
+  if (officeLat === null || officeLng === null || radius === null) {
+    const { data: settings } = await supabase
+      .from('settings')
+      .select('office_lat, office_lng, radius_m')
+      .single();
+    if (!settings) return { error: 'ไม่พบการตั้งค่าระบบหรือสาขา' };
+    officeLat = settings.office_lat;
+    officeLng = settings.office_lng;
+    radius = settings.radius_m;
+  }
 
-  if (dist > settings.radius_m) {
+  const dist = distanceMeters(input.lat, input.lng, officeLat!, officeLng!);
+
+  if (dist > radius!) {
     return {
-      error: `คุณอยู่นอกขอบเขตที่กำหนด (${Math.round(dist)} ม. จากออฟฟิศ — เกินรัศมี ${settings.radius_m} ม.)`,
+      error: `คุณอยู่นอกขอบเขตที่กำหนด (${Math.round(dist)} ม. จาก${scopeLabel} — เกินรัศมี ${radius!} ม.)`,
     };
   }
 
