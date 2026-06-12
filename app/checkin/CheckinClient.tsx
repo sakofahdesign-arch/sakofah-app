@@ -225,7 +225,7 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
         <div style={{ fontSize: 11, color: '#2e2e32' }}>{dateStr}</div>
         <div style={{ fontSize: 44, fontWeight: 700, letterSpacing: 1, lineHeight: 1 }}>{timeStr}</div>
         <div style={{ fontSize: 11, color: '#2e2e32', marginTop: 4 }}>
-          เวลาทำการ {settings?.work_start?.slice(0, 5) ?? '08:20'} – {settings?.work_end?.slice(0, 5) ?? '16:30'} น. · {workDays}
+          เวลาทำงาน {(settings?.work_start?.slice(0, 5) ?? '08:20').replace(':', '.')} น. ถึง {(settings?.work_end?.slice(0, 5) ?? '16:30').replace(':', '.')} น.
         </div>
       </div>
 
