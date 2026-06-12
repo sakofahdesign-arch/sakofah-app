@@ -114,7 +114,7 @@ export default function LoginPage() {
         </form>
 
         <div className="t-d-3" style={{ fontSize: 10, textAlign: 'center', marginTop: 14 }}>
-          v1.0 · ติดต่อ HR: 073-xxx-xxx
+          v1.0 · ติดต่อผู้ดูแลระบบ: 073-xxx-xxx
         </div>
       </div>
     </main>

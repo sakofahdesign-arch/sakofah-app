@@ -57,7 +57,7 @@ export default function DeviceRequestPage() {
         <div style={{ background: '#d6f26b', color: '#0e0e10', borderRadius: 18, padding: 20, textAlign: 'center' }}>
           <i className="ti ti-circle-check-filled" style={{ fontSize: 40 }} aria-hidden></i>
           <div style={{ fontSize: 16, fontWeight: 700, marginTop: 6 }}>ส่งคำขอเรียบร้อย</div>
-          <div style={{ fontSize: 12, marginTop: 2 }}>HR จะติดต่อกลับภายใน 24 ชม.</div>
+          <div style={{ fontSize: 12, marginTop: 2 }}>ผู้ดูแลระบบ จะติดต่อกลับภายใน 24 ชม.</div>
           <Link href="/checkin" style={{ display: 'inline-block', marginTop: 12, background: '#0e0e10', color: '#d6f26b', borderRadius: 10, padding: '8px 16px', fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>กลับหน้าหลัก</Link>
         </div>
       ) : (
@@ -87,11 +87,11 @@ export default function DeviceRequestPage() {
           )}
 
           <button onClick={submit} disabled={pending} style={{ background: '#d6f26b', color: '#0e0e10', border: 'none', borderRadius: 14, padding: 13, fontWeight: 700, fontSize: 14, cursor: 'pointer', marginTop: 4, opacity: pending ? 0.5 : 1 }}>
-            <i className="ti ti-send" style={{ fontSize: 14, marginRight: 4 }} aria-hidden></i>{pending ? 'กำลังส่ง...' : 'ส่งคำขอให้ HR'}
+            <i className="ti ti-send" style={{ fontSize: 14, marginRight: 4 }} aria-hidden></i>{pending ? 'กำลังส่ง...' : 'ส่งคำขอให้ ผู้ดูแลระบบ'}
           </button>
 
           <div style={{ fontSize: 10, color: '#8e8e92', textAlign: 'center' }}>
-            HR ตรวจสอบภายใน 24 ชม. · เครื่องเก่าจะถูกยกเลิกเมื่ออนุมัติ
+            ผู้ดูแลระบบ ตรวจสอบภายใน 24 ชม. · เครื่องเก่าจะถูกยกเลิกเมื่ออนุมัติ
           </div>
         </div>
       )}
