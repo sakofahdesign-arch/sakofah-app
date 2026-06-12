@@ -94,8 +94,8 @@ function OffsiteInner() {
     }
     const v = videoRef.current;
     const c = canvasRef.current;
-    const w = 1000;
-    const h = Math.round((v.videoHeight / v.videoWidth) * w) || 750;
+    const w = 800; // ลดจาก 1000 → ประหยัด storage
+    const h = Math.round((v.videoHeight / v.videoWidth) * w) || 600;
     c.width = w; c.height = h;
     const ctx = c.getContext('2d')!;
 
@@ -103,35 +103,35 @@ function OffsiteInner() {
     ctx.drawImage(v, 0, 0, w, h);
     if (facing === 'user') ctx.setTransform(1, 0, 0, 1, 0, 0);
 
-    // Watermark
-    const topH = 56;
+    // Watermark (scale ลงตาม w)
+    const topH = 44;
     ctx.fillStyle = 'rgba(214,242,107,0.95)';
     ctx.fillRect(0, 0, w, topH);
     ctx.fillStyle = '#0e0e10';
-    ctx.font = 'bold 26px sans-serif';
-    ctx.fillText(`SAKOFAH · ${direction === 'in' ? 'OFF-SITE IN' : 'OFF-SITE OUT'}`, 16, 36);
+    ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(`SAKOFAH · ${direction === 'in' ? 'OFF-SITE IN' : 'OFF-SITE OUT'}`, 12, 28);
 
-    const botH = 110;
+    const botH = 88;
     ctx.fillStyle = 'rgba(14,14,16,0.78)';
     ctx.fillRect(0, h - botH, w, botH);
 
     ctx.fillStyle = '#d6f26b';
-    ctx.font = 'bold 22px sans-serif';
-    ctx.fillText('📍 พิกัด GPS', 16, h - botH + 28);
+    ctx.font = 'bold 17px sans-serif';
+    ctx.fillText('📍 พิกัด GPS', 12, h - botH + 22);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '20px sans-serif';
-    ctx.fillText(`${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`, 16, h - botH + 54);
+    ctx.font = '15px sans-serif';
+    ctx.fillText(`${coords.lat.toFixed(6)}, ${coords.lng.toFixed(6)}`, 12, h - botH + 42);
 
     ctx.fillStyle = '#d6f26b';
-    ctx.font = 'bold 20px sans-serif';
-    ctx.fillText('🕐', 16, h - botH + 86);
+    ctx.font = 'bold 15px sans-serif';
+    ctx.fillText('🕐', 12, h - botH + 68);
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = '18px sans-serif';
+    ctx.font = '14px sans-serif';
     const dateStr = now.toLocaleDateString('th-TH', { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' });
     const timeStr = now.toLocaleTimeString('th-TH');
-    ctx.fillText(`${dateStr}  ·  ${timeStr}`, 48, h - botH + 88);
+    ctx.fillText(`${dateStr}  ·  ${timeStr}`, 38, h - botH + 70);
 
     c.toBlob((b) => {
       if (b) {
@@ -140,7 +140,7 @@ function OffsiteInner() {
         stream?.getTracks().forEach((t) => t.stop());
         setStream(null);
       }
-    }, 'image/jpeg', 0.85);
+    }, 'image/jpeg', 0.7); // ลดจาก 0.85 → ขนาดไฟล์เล็กลง ~40%
   }
 
   function retake() {
