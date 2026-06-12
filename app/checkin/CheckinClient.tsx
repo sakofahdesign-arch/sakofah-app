@@ -27,6 +27,24 @@ function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) 
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+function timeToMin(t: string): number {
+  const [h, m] = t.slice(0, 5).split(':').map(Number);
+  return h * 60 + m;
+}
+
+function tsToMin(ts: string): number {
+  const d = new Date(ts);
+  return d.getHours() * 60 + d.getMinutes();
+}
+
+function lateMin(ts: string, workStart: string): number {
+  return Math.max(0, tsToMin(ts) - timeToMin(workStart));
+}
+
+function earlyMin(ts: string, workEnd: string): number {
+  return Math.max(0, timeToMin(workEnd) - tsToMin(ts));
+}
+
 const HOLD_DURATION = 1000; // 1 วินาที
 
 export default function CheckinClient({ empName, empId, role, registeredDeviceId, todayCheckins, settings }: Props) {
@@ -124,7 +142,18 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
       } else if (res?.error) {
         setToast({ kind: 'err', msg: res.error });
       } else {
-        setToast({ kind: 'ok', msg: type === 'in' ? 'เช็คอินสำเร็จ ✓' : 'เช็คเอาท์สำเร็จ ✓' });
+        const ws = settings?.work_start ?? '08:20';
+        const we = settings?.work_end ?? '16:30';
+        const nowMin = now.getHours() * 60 + now.getMinutes();
+        let extra = '';
+        if (type === 'in') {
+          const late = Math.max(0, nowMin - timeToMin(ws));
+          extra = late > 0 ? ` — เข้างานสาย ${late} นาที` : ' — ตรงเวลา 👍';
+        } else {
+          const early = Math.max(0, timeToMin(we) - nowMin);
+          extra = early > 0 ? ` — เลิกก่อนเวลา ${early} นาที` : ' — ครบเวลา 👍';
+        }
+        setToast({ kind: 'ok', msg: (type === 'in' ? 'เช็คอินสำเร็จ ✓' : 'เช็คเอาท์สำเร็จ ✓') + extra });
       }
     });
   }
@@ -294,13 +323,25 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
             const isIn = c.type === 'in' || c.type === 'offsite_in';
             const iconColor = isIn ? '#d6f26b' : '#ff9d9d';
             const label = c.type === 'in' ? 'เช็คอิน' : c.type === 'out' ? 'เช็คเอาท์' : c.type === 'offsite_in' ? 'นอกสถานที่ (เข้า)' : 'นอกสถานที่ (ออก)';
+            const ws = settings?.work_start ?? '08:20';
+            const we = settings?.work_end ?? '16:30';
+            const late = isIn ? lateMin(c.ts, ws) : 0;
+            const early = !isIn ? earlyMin(c.ts, we) : 0;
             return (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderTop: i > 0 ? '0.5px solid #2a2a2d' : 'none', fontSize: 13, color: '#fff' }}>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                  <i className={isIn ? 'ti ti-login-2' : 'ti ti-logout-2'} style={{ fontSize: 16, color: iconColor }} aria-hidden></i>
-                  {label}
-                </span>
-                <span style={{ fontWeight: 600, color: '#d6f26b' }}>{new Date(c.ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
+              <div key={i} style={{ padding: '8px 0', borderTop: i > 0 ? '0.5px solid #2a2a2d' : 'none', fontSize: 13, color: '#fff' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                    <i className={isIn ? 'ti ti-login-2' : 'ti ti-logout-2'} style={{ fontSize: 16, color: iconColor }} aria-hidden></i>
+                    {label}
+                  </span>
+                  <span style={{ fontWeight: 600, color: '#d6f26b' }}>{new Date(c.ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+                {(late > 0 || early > 0) && (
+                  <div style={{ marginTop: 4, marginLeft: 24, fontSize: 11, color: late > 0 ? '#ff9d9d' : '#fcdfb1' }}>
+                    <i className={late > 0 ? 'ti ti-clock-exclamation' : 'ti ti-clock-pause'} style={{ fontSize: 12, marginRight: 4, verticalAlign: -2 }} aria-hidden></i>
+                    {late > 0 ? `เข้างานสาย ${late} นาที` : `เลิกก่อนเวลา ${early} นาที`}
+                  </div>
+                )}
               </div>
             );
           })}

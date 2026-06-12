@@ -83,8 +83,12 @@ export default function AdminClient({
 
   const workStartHr = parseInt(settings?.work_start?.slice(0, 2) ?? '8', 10);
   const workStartMin = parseInt(settings?.work_start?.slice(3, 5) ?? '20', 10);
+  const workEndHr = parseInt(settings?.work_end?.slice(0, 2) ?? '16', 10);
+  const workEndMin = parseInt(settings?.work_end?.slice(3, 5) ?? '30', 10);
   const tolerance = settings?.late_tolerance_min ?? 5;
   const cutoffMin = workStartHr * 60 + workStartMin + tolerance;
+  const workStartTotalMin = workStartHr * 60 + workStartMin;
+  const workEndTotalMin = workEndHr * 60 + workEndMin;
 
   const branches = useMemo(() => {
     const set = new Set<string>();
@@ -195,18 +199,25 @@ export default function AdminClient({
     ws3['!cols'] = [{ wch: 14 }, { wch: 24 }, { wch: 18 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
     XLSX.utils.book_append_sheet(wb, ws3, 'รายพนักงาน');
 
-    const logRows: (string | number)[][] = [['วันที่-เวลา', 'รหัสพนักงาน', 'ชื่อ', 'สาขา', 'ประเภท', 'พิกัด', 'สถานที่ Off-site']];
+    const logRows: (string | number)[][] = [['วันที่-เวลา', 'รหัสพนักงาน', 'ชื่อ', 'สาขา', 'ประเภท', 'สาย (นาที)', 'เลิกก่อน (นาที)', 'พิกัด', 'สถานที่ Off-site']];
     checkins.slice().sort((a, b) => a.ts.localeCompare(b.ts)).forEach((c) => {
+      const isIn = c.type === 'in' || c.type === 'offsite_in';
+      const isOut = c.type === 'out' || c.type === 'offsite_out';
+      const d = new Date(c.ts);
+      const mins = d.getHours() * 60 + d.getMinutes();
+      const late = isIn ? Math.max(0, mins - workStartTotalMin) : 0;
+      const early = isOut ? Math.max(0, workEndTotalMin - mins) : 0;
       logRows.push([
-        new Date(c.ts).toLocaleString('th-TH'),
+        d.toLocaleString('th-TH'),
         c.emp_id, c.employees.name, c.employees.branch ?? '',
         typeLabel(c.type),
+        late, early,
         c.lat && c.lng ? `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}` : '',
         c.location_note ?? '',
       ]);
     });
     const ws4 = XLSX.utils.aoa_to_sheet(logRows);
-    ws4['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 26 }, { wch: 30 }];
+    ws4['!cols'] = [{ wch: 22 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 26 }, { wch: 30 }];
     XLSX.utils.book_append_sheet(wb, ws4, 'ประวัติทั้งหมด');
 
     XLSX.writeFile(wb, `รายงาน_${monthStr}_${Date.now()}.xlsx`);
@@ -313,6 +324,12 @@ export default function AdminClient({
           ) : (
             historyRows.map((c) => {
               const tInfo = typeInfo(c.type);
+              const isIn = c.type === 'in' || c.type === 'offsite_in';
+              const isOut = c.type === 'out' || c.type === 'offsite_out';
+              const d = new Date(c.ts);
+              const mins = d.getHours() * 60 + d.getMinutes();
+              const late = isIn ? Math.max(0, mins - workStartTotalMin) : 0;
+              const early = isOut ? Math.max(0, workEndTotalMin - mins) : 0;
               return (
                 <div key={c.id} style={{ background: '#f4f2ec', borderRadius: 12, padding: 10, display: 'grid', gridTemplateColumns: '46px 1fr auto', gap: 10, alignItems: 'center' }}>
                   {c.photo_url ? (
@@ -326,6 +343,8 @@ export default function AdminClient({
                     <div style={{ fontSize: 13, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                       {c.employees.name}
                       <span style={{ background: tInfo.bg, color: tInfo.color, padding: '1px 7px', borderRadius: 999, fontSize: 10, fontWeight: 600 }}>{tInfo.label}</span>
+                      {late > 0 && <span style={{ background: '#fcc6c6', color: '#a32d2d', padding: '1px 7px', borderRadius: 999, fontSize: 10, fontWeight: 600 }}>สาย {late} นาที</span>}
+                      {early > 0 && <span style={{ background: '#fcdfb1', color: '#854f0b', padding: '1px 7px', borderRadius: 999, fontSize: 10, fontWeight: 600 }}>เลิกก่อน {early} นาที</span>}
                     </div>
                     <div style={{ fontSize: 11, color: '#5c5c60', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {c.emp_id} · {c.employees.branch ?? '-'}{c.location_note ? ` · ${c.location_note}` : ''}
