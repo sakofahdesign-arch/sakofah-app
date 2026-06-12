@@ -245,10 +245,10 @@ export default function AdminClient({
 
       {/* KPI grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10, marginBottom: 14 }}>
-        <KpiCard label="พนักงาน" value={stats.total} bg={C.purple} textCol="#26215c" />
+        <KpiCard label="พนักงาน" value={stats.total} bg={C.purple} textCol="#0e0e10" />
         <KpiCard label="มาตรงเวลา" value={`${stats.onTimeRate}%`} bg={C.lime} textCol={C.dark} />
         <KpiCard label="มาสาย" value={`${stats.lateRate}%`} sub={`${stats.lateCount} ครั้ง`} bg={C.redDeep} textCol="#fff" />
-        <KpiCard label="นอกสถานที่" value={stats.offsites} sub="ครั้ง" bg={C.mintDeep} textCol="#04342c" />
+        <KpiCard label="นอกสถานที่" value={stats.offsites} sub="ครั้ง" bg="#FFA02E" textCol="#0e0e10" />
       </div>
 
       {/* Check-in/out table — full width */}
