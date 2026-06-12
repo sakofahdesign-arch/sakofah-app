@@ -102,6 +102,24 @@ export default function AdminClient({
     return () => { supabase.removeChannel(channel); };
   }, [router]);
 
+  // Polling fallback — refresh every 5s when tab visible (in case realtime drops events)
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null;
+    const start = () => {
+      if (interval) return;
+      interval = setInterval(() => {
+        if (!document.hidden) router.refresh();
+      }, 5000);
+    };
+    const stop = () => {
+      if (interval) { clearInterval(interval); interval = null; }
+    };
+    const onVis = () => { if (document.hidden) stop(); else start(); };
+    document.addEventListener('visibilitychange', onVis);
+    start();
+    return () => { stop(); document.removeEventListener('visibilitychange', onVis); };
+  }, [router]);
+
   function handleApproveDevice(id: string) {
     startTransition(async () => {
       const res = await approveDeviceRequest(id);
