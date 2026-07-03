@@ -54,7 +54,7 @@ export default function LoginPage() {
                 aria-hidden></i>
               <input
                 name="emp_id"
-                placeholder="SKF-00428"
+                placeholder="691415"
                 required
                 autoComplete="username"
                 className="input-dark"
