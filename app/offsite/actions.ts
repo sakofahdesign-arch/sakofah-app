@@ -19,9 +19,11 @@ export async function submitOffsite(formData: FormData) {
   const deviceId = (formData.get('device_id') as string) ?? '';
   if (!deviceId) return { error: 'ไม่พบรหัสอุปกรณ์' };
 
+  // ต้องผูกอุปกรณ์ผ่านหน้า onboarding ก่อน (ไม่ผูกแบบ lazy อีกต่อไป)
   if (!emp.device_id) {
-    await supabase.from('employees').update({ device_id: deviceId }).eq('emp_id', emp.emp_id);
-  } else if (emp.device_id !== deviceId) {
+    return { error: 'DEVICE_NOT_BOUND' };
+  }
+  if (emp.device_id !== deviceId) {
     return { error: 'DEVICE_MISMATCH' };
   }
 

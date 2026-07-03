@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { submitCheckin, signOut } from './actions';
 import { getOrCreateDeviceId } from '@/lib/device';
 
@@ -48,6 +49,7 @@ function earlyMin(ts: string, workEnd: string): number {
 const HOLD_DURATION = 1000; // 1 วินาที
 
 export default function CheckinClient({ empName, empId, role, registeredDeviceId, todayCheckins, settings }: Props) {
+  const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -67,6 +69,11 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
   }, []);
 
   useEffect(() => { setDeviceId(getOrCreateDeviceId()); }, []);
+
+  // ยังไม่ผูกอุปกรณ์ → บังคับไปหน้า onboarding ผูกเครื่องก่อน
+  useEffect(() => {
+    if (deviceId && !registeredDeviceId) router.replace('/account/device/bind');
+  }, [deviceId, registeredDeviceId, router]);
 
   const deviceMismatch = !!registeredDeviceId && !!deviceId && registeredDeviceId !== deviceId;
 
@@ -138,7 +145,9 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
     setTimeout(() => setSparkle(false), 800);
     startTransition(async () => {
       const res = await submitCheckin({ type, lat: coords!.lat, lng: coords!.lng, device_id: deviceId });
-      if (res?.error === 'DEVICE_MISMATCH') {
+      if (res?.error === 'DEVICE_NOT_BOUND') {
+        router.replace('/account/device/bind');
+      } else if (res?.error === 'DEVICE_MISMATCH') {
         setToast({ kind: 'err', msg: 'เครื่องนี้ไม่ตรงกับที่ลงทะเบียน — โปรดขอเปลี่ยนเครื่อง' });
       } else if (res?.error) {
         setToast({ kind: 'err', msg: res.error });

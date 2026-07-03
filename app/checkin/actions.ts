@@ -38,14 +38,11 @@ export async function submitCheckin(input: CheckinInput) {
   if (!emp) return { error: 'ไม่พบข้อมูลพนักงาน' };
   if (!emp.active) return { error: 'บัญชีถูกระงับ' };
 
-  // Device binding logic
+  // Device binding — ต้องผูกอุปกรณ์ผ่านหน้า onboarding ก่อน (ไม่ผูกแบบ lazy อีกต่อไป)
   if (!emp.device_id) {
-    const { error: bindErr } = await supabase
-      .from('employees')
-      .update({ device_id: input.device_id })
-      .eq('emp_id', emp.emp_id);
-    if (bindErr) return { error: 'ผูกอุปกรณ์ไม่สำเร็จ: ' + bindErr.message };
-  } else if (emp.device_id !== input.device_id) {
+    return { error: 'DEVICE_NOT_BOUND' };
+  }
+  if (emp.device_id !== input.device_id) {
     return { error: 'DEVICE_MISMATCH' };
   }
 

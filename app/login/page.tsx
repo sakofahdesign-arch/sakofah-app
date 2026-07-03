@@ -21,12 +21,14 @@ export default function LoginPage() {
       <div className="card-dark" style={{ width: '100%', maxWidth: 380, borderRadius: 32, padding: 22 }}>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 12, background: 'var(--lime)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center'
-          }}>
-            <i className="ti ti-moon-stars" style={{ fontSize: 20, color: '#0e0e10' }} aria-hidden></i>
-          </div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/logo-source.jpg"
+            alt="Sakofah"
+            width={40}
+            height={40}
+            style={{ width: 40, height: 40, borderRadius: 12, display: 'block' }}
+          />
           <div>
             <div style={{ fontWeight: 600, lineHeight: 1, fontSize: 14 }}>Sakofah</div>
             <div className="t-d-3" style={{ fontSize: 11 }}>Islamic</div>
@@ -66,9 +68,15 @@ export default function LoginPage() {
           <div style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
               <span className="t-d-3" style={{ fontSize: 11 }}>PIN / รหัสผ่าน</span>
-              <span className="accent" style={{ fontSize: 11, fontWeight: 500, cursor: 'pointer' }}>
+              <a
+                href="https://line.me/ti/p/EKCcFN-kqs"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="accent"
+                style={{ fontSize: 11, fontWeight: 500, cursor: 'pointer', textDecoration: 'none' }}
+              >
                 ลืมรหัส?
-              </span>
+              </a>
             </div>
             <div style={{ position: 'relative' }}>
               <i className="ti ti-lock"
@@ -114,7 +122,10 @@ export default function LoginPage() {
         </form>
 
         <div className="t-d-3" style={{ fontSize: 10, textAlign: 'center', marginTop: 14 }}>
-          v1.0 · ติดต่อผู้ดูแลระบบ: 073-xxx-xxx
+          v1.0 · ติดต่อผู้พัฒนาระบบ{' '}
+          <a href="tel:0630897747" className="accent" style={{ fontWeight: 500, textDecoration: 'none' }}>
+            063-0897747
+          </a>
         </div>
       </div>
     </main>

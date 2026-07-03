@@ -18,6 +18,7 @@ export default function OffsitePage() {
 function OffsiteInner() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [facing, setFacing] = useState<'environment' | 'user'>('environment');
   const [photo, setPhoto] = useState<Blob | null>(null);
@@ -65,6 +66,11 @@ function OffsiteInner() {
 
   async function startCamera(mode: 'environment' | 'user' = facing) {
     setErr(null);
+    // in-app browser (เช่น LINE บน Android) มักไม่มี/บล็อก getUserMedia → ใช้กล้องเนทีฟผ่าน file input
+    if (!navigator.mediaDevices?.getUserMedia) {
+      fileRef.current?.click();
+      return;
+    }
     try {
       stream?.getTracks().forEach((t) => t.stop());
       const s = await navigator.mediaDevices.getUserMedia({
@@ -77,8 +83,9 @@ function OffsiteInner() {
         videoRef.current.srcObject = s;
         await videoRef.current.play();
       }
-    } catch (e) {
-      setErr('เปิดกล้องไม่สำเร็จ: ' + (e as Error).message);
+    } catch {
+      // ถูกบล็อก (LINE Android ฯลฯ) → fallback ไปกล้องเนทีฟของเครื่อง
+      fileRef.current?.click();
     }
   }
 
@@ -87,21 +94,21 @@ function OffsiteInner() {
     startCamera(next);
   }
 
-  function takePhoto() {
-    if (!videoRef.current || !canvasRef.current || !coords || !now) {
+  // วาดรูป + ลายน้ำ (GPS + เวลา) ลง canvas แล้วเก็บเป็น photo — ใช้ทั้งกล้องสดและไฟล์
+  function renderWatermarked(source: CanvasImageSource, srcW: number, srcH: number, mirror: boolean) {
+    if (!canvasRef.current || !coords || !now) {
       setErr('กรุณารอ GPS ตอบกลับก่อน');
       return;
     }
-    const v = videoRef.current;
     const c = canvasRef.current;
     const w = 800; // ลดจาก 1000 → ประหยัด storage
-    const h = Math.round((v.videoHeight / v.videoWidth) * w) || 600;
+    const h = Math.round((srcH / srcW) * w) || 600;
     c.width = w; c.height = h;
     const ctx = c.getContext('2d')!;
 
-    if (facing === 'user') { ctx.translate(w, 0); ctx.scale(-1, 1); }
-    ctx.drawImage(v, 0, 0, w, h);
-    if (facing === 'user') ctx.setTransform(1, 0, 0, 1, 0, 0);
+    if (mirror) { ctx.translate(w, 0); ctx.scale(-1, 1); }
+    ctx.drawImage(source, 0, 0, w, h);
+    if (mirror) ctx.setTransform(1, 0, 0, 1, 0, 0);
 
     // Watermark (scale ลงตาม w)
     const topH = 44;
@@ -137,10 +144,33 @@ function OffsiteInner() {
       if (b) {
         setPhoto(b);
         setPhotoUrl(URL.createObjectURL(b));
-        stream?.getTracks().forEach((t) => t.stop());
-        setStream(null);
       }
     }, 'image/jpeg', 0.7); // ลดจาก 0.85 → ขนาดไฟล์เล็กลง ~40%
+  }
+
+  function takePhoto() {
+    if (!videoRef.current) return;
+    const v = videoRef.current;
+    renderWatermarked(v, v.videoWidth, v.videoHeight, facing === 'user');
+    stream?.getTracks().forEach((t) => t.stop());
+    setStream(null);
+  }
+
+  // เลือกรูปจากกล้องเนทีฟ (fallback) → ลายน้ำเหมือนกล้องสด
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // ให้เลือกไฟล์เดิมซ้ำได้
+    if (!file) return;
+    if (!coords || !now) { setErr('กรุณารอ GPS ตอบกลับก่อน'); return; }
+    setErr(null);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      renderWatermarked(img, img.naturalWidth || 800, img.naturalHeight || 600, false);
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => { setErr('เปิดรูปไม่สำเร็จ ลองใหม่อีกครั้ง'); URL.revokeObjectURL(url); };
+    img.src = url;
   }
 
   function retake() {
@@ -163,7 +193,8 @@ function OffsiteInner() {
 
     startTransition(async () => {
       const res = await submitOffsite(fd);
-      if (res?.error === 'DEVICE_MISMATCH') setErr('เครื่องนี้ไม่ตรงกับที่ลงทะเบียน — โปรดขอเปลี่ยนเครื่อง');
+      if (res?.error === 'DEVICE_NOT_BOUND') router.replace('/account/device/bind');
+      else if (res?.error === 'DEVICE_MISMATCH') setErr('เครื่องนี้ไม่ตรงกับที่ลงทะเบียน — โปรดขอเปลี่ยนเครื่อง');
       else if (res?.error) setErr(res.error);
       else router.push('/checkin');
     });
@@ -208,6 +239,14 @@ function OffsiteInner() {
         />
         {photoUrl && <img src={photoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />}
         <canvas ref={canvasRef} style={{ display: 'none' }} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFile}
+          style={{ display: 'none' }}
+        />
 
         {stream && (
           <>
