@@ -91,9 +91,9 @@ export default function BindClient({ empId, branchName, office }: { empId: strin
   return (
     <main style={{ minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 18, display: 'flex', flexDirection: 'column' }}>
       {/* Top bar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, color: '#c9c9cc' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, color: '#2e2e32' }}>
         {step === 3 ? (
-          <button onClick={() => setStep(2)} style={{ background: 'transparent', border: 'none', color: '#c9c9cc', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, padding: 0 }}>
+          <button onClick={() => setStep(2)} style={{ background: 'transparent', border: 'none', color: '#2e2e32', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, padding: 0 }}>
             <i className="ti ti-arrow-left" style={{ fontSize: 18 }} aria-hidden></i>
           </button>
         ) : (
@@ -116,7 +116,7 @@ export default function BindClient({ empId, branchName, office }: { empId: strin
 
           <div style={{ textAlign: 'center', marginBottom: 16 }}>
             <div style={{ fontSize: 22, fontWeight: 700 }}>ผูกอุปกรณ์เครื่องนี้</div>
-            <div className="t-d-2" style={{ fontSize: 12, marginTop: 4, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 12, marginTop: 4, lineHeight: 1.5, color: '#5c5c60' }}>
               ระบบจะจดจำเครื่องนี้เป็นอุปกรณ์<br />หลักของรหัส {empId}
             </div>
           </div>
@@ -129,10 +129,10 @@ export default function BindClient({ empId, branchName, office }: { empId: strin
           </div>
 
           {/* Note */}
-          <div style={{ background: 'rgba(214,242,107,0.09)', border: '0.5px solid rgba(214,242,107,0.3)', borderRadius: 14, padding: 12, display: 'flex', gap: 10, marginBottom: 14 }}>
-            <i className="ti ti-info-circle" style={{ fontSize: 18, color: LIME, marginTop: 1 }} aria-hidden></i>
-            <div style={{ fontSize: 12, lineHeight: 1.5, color: '#e6e6e6' }}>
-              <b>1 รหัสพนักงาน = 1 เครื่อง</b><br />
+          <div style={{ background: '#e7f3bf', border: '1px solid #c2d97a', borderRadius: 14, padding: 12, display: 'flex', gap: 10, marginBottom: 14 }}>
+            <i className="ti ti-info-circle" style={{ fontSize: 18, color: '#5c6b1e', marginTop: 1 }} aria-hidden></i>
+            <div style={{ fontSize: 12, lineHeight: 1.5, color: '#2e2e32' }}>
+              <b style={{ color: '#0e0e10' }}>1 รหัสพนักงาน = 1 เครื่อง</b><br />
               เปลี่ยนเครื่องต้องให้ผู้ดูแลระบบอนุมัติก่อน เพื่อป้องกันการลงเวลาแทนกัน
             </div>
           </div>
@@ -166,7 +166,7 @@ export default function BindClient({ empId, branchName, office }: { empId: strin
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 22, fontWeight: 700 }}>ตรวจสอบที่ตั้ง</div>
-            <div className="t-d-2" style={{ fontSize: 12, marginTop: 4 }}>ระบบกำลังยืนยันว่าคุณอยู่ในออฟฟิศ</div>
+            <div style={{ fontSize: 12, marginTop: 4, color: '#5c5c60' }}>ระบบกำลังยืนยันว่าคุณอยู่ในออฟฟิศ</div>
           </div>
 
           {/* Map-ish card */}
