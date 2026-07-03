@@ -7,6 +7,13 @@ import { createClient } from '@/lib/supabase/client';
 import { getOrCreateDeviceId } from '@/lib/device';
 import { submitOffsite } from './actions';
 
+// in-app browser (LINE, FB, IG ฯลฯ) มักบล็อก getUserMedia → ต้องใช้กล้องเนทีฟผ่าน file input
+function isInAppBrowser(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /\bLine\/|FBAN|FBAV|Instagram|Messenger|MicroMessenger|GSA\//i.test(ua);
+}
+
 export default function OffsitePage() {
   return (
     <Suspense fallback={<div style={{ padding: 20 }}>กำลังโหลด...</div>}>
@@ -66,8 +73,8 @@ function OffsiteInner() {
 
   async function startCamera(mode: 'environment' | 'user' = facing) {
     setErr(null);
-    // in-app browser (เช่น LINE บน Android) มักไม่มี/บล็อก getUserMedia → ใช้กล้องเนทีฟผ่าน file input
-    if (!navigator.mediaDevices?.getUserMedia) {
+    // LINE/in-app browser หรือไม่มี getUserMedia → เปิดกล้องเนทีฟตรงๆ (กันค้าง + กดซ้ำได้)
+    if (isInAppBrowser() || !navigator.mediaDevices?.getUserMedia) {
       fileRef.current?.click();
       return;
     }

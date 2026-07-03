@@ -131,3 +131,16 @@ input, button, textarea, select {
   border-radius: 14px;
   padding: 10px 12px;
 }
+
+/* Tactile press feedback — ทุกอย่างที่กดได้ยุบลงเวลาแตะ */
+button, a[href], [role="button"] {
+  transition: transform 0.08s ease, opacity 0.08s ease;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+button:not(:disabled):active,
+a[href]:active,
+[role="button"]:active {
+  transform: scale(0.95);
+  opacity: 0.9;
+}
