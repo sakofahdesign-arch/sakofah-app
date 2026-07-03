@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getOrCreateDeviceId, getDeviceInfo, type DeviceInfo } from '@/lib/device';
-import { bindDevice, signOut } from './actions';
+import { useLiff } from '../../../LiffProvider';
+import { bindLine, signOut } from './actions';
 
 type Office = { lat: number; lng: number; radius_m: number; ssid: string | null } | null;
 
@@ -22,9 +22,8 @@ const DARK = '#0e0e10';
 
 export default function BindClient({ empId, branchName, office }: { empId: string; branchName: string; office: Office }) {
   const router = useRouter();
+  const { profile, getIdToken } = useLiff();
   const [step, setStep] = useState<2 | 3>(2);
-  const [deviceId, setDeviceId] = useState('');
-  const [info, setInfo] = useState<DeviceInfo>({ label: '', model: '', os: '' });
   const [err, setErr] = useState<{ msg: string; showChange?: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
   const [signingOut, setSigningOut] = useState(false);
@@ -32,12 +31,6 @@ export default function BindClient({ empId, branchName, office }: { empId: strin
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsErr, setGpsErr] = useState(false);
 
-  useEffect(() => {
-    setDeviceId(getOrCreateDeviceId());
-    setInfo(getDeviceInfo());
-  }, []);
-
-  // GPS เฉพาะตอนอยู่สเต็ปตรวจสอบที่ตั้ง
   useEffect(() => {
     if (step !== 3 || !navigator.geolocation) return;
     const watch = navigator.geolocation.watchPosition(
@@ -54,16 +47,18 @@ export default function BindClient({ empId, branchName, office }: { empId: strin
   function confirmBind() {
     setErr(null);
     startTransition(async () => {
-      const res = await bindDevice(deviceId);
+      const res = await bindLine(getIdToken());
       if (res.status === 'ok') { setStep(3); return; }
       if (res.status === 'taken') {
-        setErr({ msg: 'อุปกรณ์นี้ถูกผูกกับพนักงานคนอื่นแล้ว — ใช้เครื่องนี้ลงเวลาไม่ได้', showChange: true });
+        setErr({ msg: 'บัญชี LINE นี้ถูกผูกกับพนักงานคนอื่นแล้ว — ผูกซ้ำไม่ได้', showChange: true });
       } else if (res.status === 'already_bound_other') {
-        setErr({ msg: 'บัญชีนี้ผูกกับเครื่องอื่นไว้แล้ว หากต้องการเปลี่ยนเครื่อง กรุณาส่งคำขอให้ผู้ดูแลระบบ', showChange: true });
+        setErr({ msg: 'บัญชีพนักงานนี้ผูกกับ LINE อื่นไว้แล้ว หากต้องการเปลี่ยน กรุณาติดต่อผู้ดูแลระบบ', showChange: true });
+      } else if (res.status === 'unverified') {
+        setErr({ msg: 'ยืนยัน LINE ไม่สำเร็จ — โปรดเปิดผ่านแอป LINE อีกครั้ง' });
       } else if (res.status === 'no_emp') {
         setErr({ msg: 'เซสชันหมดอายุหรือไม่พบข้อมูลพนักงาน — โปรดเข้าสู่ระบบใหม่' });
       } else {
-        setErr({ msg: res.message ?? 'ผูกอุปกรณ์ไม่สำเร็จ' });
+        setErr({ msg: res.message ?? 'ผูกบัญชี LINE ไม่สำเร็จ' });
       }
     });
   }
@@ -104,56 +99,62 @@ export default function BindClient({ empId, branchName, office }: { empId: strin
 
       {step === 2 ? (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-          {/* Icon */}
+          {/* LINE profile */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
-            <div style={{ position: 'relative', width: 88, height: 88, borderRadius: 26, background: '#1a1a1c', border: '0.5px solid #2a2a2d', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <i className="ti ti-device-mobile" style={{ fontSize: 44, color: LIME }} aria-hidden></i>
-              <div style={{ position: 'absolute', right: -6, bottom: -6, width: 30, height: 30, borderRadius: '50%', background: LIME, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <i className="ti ti-link" style={{ fontSize: 16, color: DARK }} aria-hidden></i>
+            <div style={{ position: 'relative', width: 96, height: 96 }}>
+              {profile?.pictureUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={profile.pictureUrl} alt="" width={96} height={96}
+                  style={{ width: 96, height: 96, borderRadius: '50%', objectFit: 'cover', border: '2px solid #2a2a2d' }} />
+              ) : (
+                <div style={{ width: 96, height: 96, borderRadius: '50%', background: '#1a1a1c', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <i className="ti ti-user" style={{ fontSize: 44, color: '#5c5c60' }} aria-hidden></i>
+                </div>
+              )}
+              <div style={{ position: 'absolute', right: -2, bottom: -2, width: 32, height: 32, borderRadius: '50%', background: '#06c755', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '3px solid #efeee9' }}>
+                <i className="ti ti-brand-line" style={{ fontSize: 18, color: '#fff' }} aria-hidden></i>
               </div>
             </div>
           </div>
 
           <div style={{ textAlign: 'center', marginBottom: 16 }}>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>ผูกอุปกรณ์เครื่องนี้</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>ยืนยันตัวตนด้วย LINE</div>
             <div style={{ fontSize: 12, marginTop: 4, lineHeight: 1.5, color: '#5c5c60' }}>
-              ระบบจะจดจำเครื่องนี้เป็นอุปกรณ์<br />หลักของรหัส {empId}
+              ผูกบัญชี LINE นี้เป็นตัวตนหลัก<br />ของรหัสพนักงาน {empId}
             </div>
           </div>
 
-          {/* Device info card */}
+          {/* Info card */}
           <div style={{ background: DARK, borderRadius: 16, padding: 4, marginBottom: 12 }}>
-            <InfoRow label="ชื่อเครื่อง" value={info.label || '—'} />
-            <InfoRow label="รุ่น / OS" value={[info.model, info.os].filter(Boolean).join(' · ') || '—'} />
-            <InfoRow label="Device ID" value={deviceId ? `${deviceId.slice(0, 4)}…${deviceId.slice(-4)}` : '—'} mono last />
+            <InfoRow label="บัญชี LINE" value={profile?.displayName || '—'} last />
           </div>
 
           {/* Note */}
           <div style={{ background: '#e7f3bf', border: '1px solid #c2d97a', borderRadius: 14, padding: 12, display: 'flex', gap: 10, marginBottom: 14 }}>
             <i className="ti ti-info-circle" style={{ fontSize: 18, color: '#5c6b1e', marginTop: 1 }} aria-hidden></i>
             <div style={{ fontSize: 12, lineHeight: 1.5, color: '#2e2e32' }}>
-              <b style={{ color: '#0e0e10' }}>1 รหัสพนักงาน = 1 เครื่อง</b><br />
-              เปลี่ยนเครื่องต้องให้ผู้ดูแลระบบอนุมัติก่อน เพื่อป้องกันการลงเวลาแทนกัน
+              <b style={{ color: '#0e0e10' }}>1 บัญชี LINE = 1 พนักงาน</b><br />
+              เปลี่ยนบัญชีต้องให้ผู้ดูแลระบบอนุมัติก่อน เพื่อป้องกันการลงเวลาแทนกัน
             </div>
           </div>
 
           {err && (
-            <div style={{ background: 'rgba(255,90,90,0.12)', border: '0.5px solid rgba(255,90,90,0.4)', color: '#ff9d9d', borderRadius: 12, padding: 10, fontSize: 12, marginBottom: 12 }}>
+            <div style={{ background: 'rgba(255,90,90,0.12)', border: '0.5px solid rgba(255,90,90,0.4)', color: '#c0392b', borderRadius: 12, padding: 10, fontSize: 12, marginBottom: 12 }}>
               <i className="ti ti-alert-circle" style={{ fontSize: 14, marginRight: 6, verticalAlign: -2 }} aria-hidden></i>
               {err.msg}
               {err.showChange && (
-                <Link href="/account/device" style={{ display: 'block', marginTop: 8, color: LIME, fontWeight: 600, textDecoration: 'none' }}>
-                  ส่งคำขอเปลี่ยนเครื่อง <i className="ti ti-arrow-right" style={{ fontSize: 12 }} aria-hidden></i>
+                <Link href="/account/device" style={{ display: 'block', marginTop: 8, color: '#5c6b1e', fontWeight: 600, textDecoration: 'none' }}>
+                  แจ้งผู้ดูแลระบบ <i className="ti ti-arrow-right" style={{ fontSize: 12 }} aria-hidden></i>
                 </Link>
               )}
             </div>
           )}
 
           <div style={{ marginTop: 'auto' }}>
-            <button onClick={confirmBind} disabled={pending || !deviceId}
-              style={{ width: '100%', background: LIME, color: DARK, border: 'none', borderRadius: 16, padding: 15, fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: (pending || !deviceId) ? 0.5 : 1, marginBottom: 8 }}>
+            <button onClick={confirmBind} disabled={pending || !profile}
+              style={{ width: '100%', background: LIME, color: DARK, border: 'none', borderRadius: 16, padding: 15, fontWeight: 700, fontSize: 15, cursor: 'pointer', opacity: (pending || !profile) ? 0.5 : 1, marginBottom: 8 }}>
               <i className="ti ti-check" style={{ fontSize: 16, marginRight: 6, verticalAlign: -2 }} aria-hidden></i>
-              {pending && !signingOut ? 'กำลังผูกอุปกรณ์...' : 'ยืนยันผูกอุปกรณ์'}
+              {pending && !signingOut ? 'กำลังยืนยัน...' : 'ยืนยันบัญชี LINE นี้'}
             </button>
             <button onClick={cancel} disabled={pending}
               style={{ width: '100%', background: DARK, color: '#c9c9cc', border: 'none', borderRadius: 16, padding: 14, fontWeight: 500, fontSize: 14, cursor: 'pointer', opacity: pending ? 0.5 : 1 }}>
@@ -189,7 +190,7 @@ export default function BindClient({ empId, branchName, office }: { empId: strin
               ok={inRange}
               pendingState={!coords && !gpsErr}
             />
-            <CheckRow icon="device-mobile-check" title="อุปกรณ์" value="ตรงกับที่ลงทะเบียน" ok />
+            <CheckRow icon="brand-line" title="บัญชี LINE" value={`${profile?.displayName ?? ''} · ผูกแล้ว`} ok />
           </div>
 
           <div style={{ marginTop: 'auto', paddingTop: 16 }}>

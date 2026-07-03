@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import LiffProvider from "./LiffProvider";
 
 export const metadata: Metadata = {
   title: "Sakofah Islamic — ระบบลงเวลาพนักงาน",
@@ -49,7 +50,9 @@ export default function RootLayout({
           href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.17.0/dist/tabler-icons.min.css"
         />
       </head>
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <LiffProvider>{children}</LiffProvider>
+      </body>
     </html>
   );
 }

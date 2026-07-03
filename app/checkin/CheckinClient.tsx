@@ -4,13 +4,12 @@ import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { submitCheckin, signOut } from './actions';
-import { getOrCreateDeviceId } from '@/lib/device';
+import { useLiff } from '../LiffProvider';
 
 type Props = {
   empName: string;
   empId: string;
   role: string;
-  registeredDeviceId: string | null;
   todayCheckins: { type: string; ts: string }[];
   settings: {
     office_lat: number; office_lng: number; radius_m: number;
@@ -48,8 +47,9 @@ function earlyMin(ts: string, workEnd: string): number {
 
 const HOLD_DURATION = 1000; // 1 วินาที
 
-export default function CheckinClient({ empName, empId, role, registeredDeviceId, todayCheckins, settings }: Props) {
+export default function CheckinClient({ empName, empId, role, todayCheckins, settings }: Props) {
   const router = useRouter();
+  const { getIdToken } = useLiff();
   const [now, setNow] = useState<Date | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -58,7 +58,6 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
   const [holdProgress, setHoldProgress] = useState(0);
   const [sparkle, setSparkle] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [deviceId, setDeviceId] = useState<string>('');
   const holdTimer = useRef<number | null>(null);
   const holdStart = useRef<number>(0);
 
@@ -67,15 +66,6 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
-
-  useEffect(() => { setDeviceId(getOrCreateDeviceId()); }, []);
-
-  // ยังไม่ผูกอุปกรณ์ → บังคับไปหน้า onboarding ผูกเครื่องก่อน
-  useEffect(() => {
-    if (deviceId && !registeredDeviceId) router.replace('/account/device/bind');
-  }, [deviceId, registeredDeviceId, router]);
-
-  const deviceMismatch = !!registeredDeviceId && !!deviceId && registeredDeviceId !== deviceId;
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -144,11 +134,13 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
     setSparkle(true);
     setTimeout(() => setSparkle(false), 800);
     startTransition(async () => {
-      const res = await submitCheckin({ type, lat: coords!.lat, lng: coords!.lng, device_id: deviceId });
-      if (res?.error === 'DEVICE_NOT_BOUND') {
+      const res = await submitCheckin({ type, lat: coords!.lat, lng: coords!.lng, idToken: getIdToken() });
+      if (res?.error === 'LINE_NOT_BOUND') {
         router.replace('/account/device/bind');
-      } else if (res?.error === 'DEVICE_MISMATCH') {
-        setToast({ kind: 'err', msg: 'เครื่องนี้ไม่ตรงกับที่ลงทะเบียน — โปรดขอเปลี่ยนเครื่อง' });
+      } else if (res?.error === 'LINE_MISMATCH') {
+        setToast({ kind: 'err', msg: 'บัญชี LINE ไม่ตรงกับที่ลงทะเบียน — เช็คอินแทนกันไม่ได้' });
+      } else if (res?.error === 'LINE_UNVERIFIED') {
+        setToast({ kind: 'err', msg: 'ยืนยัน LINE ไม่สำเร็จ — โปรดเปิดผ่านแอป LINE อีกครั้ง' });
       } else if (res?.error) {
         setToast({ kind: 'err', msg: res.error });
       } else {
@@ -258,20 +250,6 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
         </div>
       </div>
 
-      {/* Device mismatch banner */}
-      {deviceMismatch && (
-        <Link href="/account/device" style={{ textDecoration: 'none', display: 'block', marginBottom: 14 }}>
-          <div style={{ background: '#e24b4a', color: '#fff', borderRadius: 16, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <i className="ti ti-shield-x" style={{ fontSize: 26, color: '#fff' }} aria-hidden></i>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>เครื่องนี้ไม่ตรงกับที่ลงทะเบียน</div>
-              <div style={{ fontSize: 11, opacity: 0.9 }}>เช็คอินไม่ได้ — แตะเพื่อขอเปลี่ยนเครื่อง</div>
-            </div>
-            <i className="ti ti-chevron-right" style={{ fontSize: 18, color: '#fff' }} aria-hidden></i>
-          </div>
-        </Link>
-      )}
-
       {/* MAIN ROUND ACTION BUTTON */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 18 }}>
         {!hasCheckedIn ? (
@@ -360,7 +338,7 @@ export default function CheckinClient({ empName, empId, role, registeredDeviceId
       )}
 
       <div style={{ marginTop: 14, textAlign: 'center', fontSize: 10, color: '#5c5c60' }}>
-        {empId} · 1 อุปกรณ์ = 1 พนักงาน
+        {empId} · 1 บัญชี LINE = 1 พนักงาน
       </div>
 
       {toast && (

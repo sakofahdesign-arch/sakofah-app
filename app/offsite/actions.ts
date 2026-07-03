@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { verifyLineIdToken } from '@/lib/line';
 import { revalidatePath } from 'next/cache';
 
 export async function submitOffsite(formData: FormData) {
@@ -8,23 +9,24 @@ export async function submitOffsite(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'ไม่ได้เข้าสู่ระบบ' };
 
+  // ยืนยันบัญชี LINE ฝั่ง server
+  const lineUserId = await verifyLineIdToken(formData.get('idToken') as string | null);
+  if (!lineUserId) return { error: 'LINE_UNVERIFIED' };
+
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, active, device_id')
+    .select('emp_id, active, line_user_id')
     .eq('id', user.id)
     .single();
 
   if (!emp || !emp.active) return { error: 'ไม่พบข้อมูลพนักงาน' };
 
-  const deviceId = (formData.get('device_id') as string) ?? '';
-  if (!deviceId) return { error: 'ไม่พบรหัสอุปกรณ์' };
-
-  // ต้องผูกอุปกรณ์ผ่านหน้า onboarding ก่อน (ไม่ผูกแบบ lazy อีกต่อไป)
-  if (!emp.device_id) {
-    return { error: 'DEVICE_NOT_BOUND' };
+  // ต้องผูกบัญชี LINE ผ่านหน้า onboarding ก่อน + ต้องเป็น LINE เดียวกับที่ผูกไว้
+  if (!emp.line_user_id) {
+    return { error: 'LINE_NOT_BOUND' };
   }
-  if (emp.device_id !== deviceId) {
-    return { error: 'DEVICE_MISMATCH' };
+  if (emp.line_user_id !== lineUserId) {
+    return { error: 'LINE_MISMATCH' };
   }
 
   // Auto-detect direction from today's checkins

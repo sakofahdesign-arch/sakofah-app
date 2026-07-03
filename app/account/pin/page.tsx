@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useState, useEffect, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -11,12 +11,26 @@ export default function ChangePinPage() {
   const [confirmPin, setConfirmPin] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
+  const [forced, setForced] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+
+  // ตรวจว่ายังไม่เคยเปลี่ยน PIN → โหมดบังคับ (onboarding)
+  useEffect(() => {
+    (async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: emp } = await supabase.from('employees').select('pin_changed').eq('id', user.id).single();
+      if (emp && !emp.pin_changed) setForced(true);
+    })();
+  }, []);
 
   function submit() {
     setErr(null);
     if (newPin.length < 6) { setErr('PIN ใหม่ต้องมีอย่างน้อย 6 หลัก'); return; }
+    if (newPin === '123456') { setErr('ห้ามใช้ PIN เริ่มต้น 123456 — โปรดตั้งรหัสใหม่'); return; }
+    if (newPin === oldPin) { setErr('PIN ใหม่ต้องต่างจาก PIN เดิม'); return; }
     if (newPin !== confirmPin) { setErr('PIN ใหม่และยืนยันไม่ตรงกัน'); return; }
 
     startTransition(async () => {
@@ -31,25 +45,40 @@ export default function ChangePinPage() {
       const { error } = await supabase.auth.updateUser({ password: newPin });
       if (error) { setErr(error.message); return; }
 
+      await supabase.rpc('mark_pin_changed');
+
       setOk(true);
-      setTimeout(() => router.push('/checkin'), 1500);
+      // onboarding: เปลี่ยน PIN แล้วไปผูก LINE ต่อ; ไม่ใช่โหมดบังคับ → กลับหน้าเช็คอิน
+      setTimeout(() => router.replace(forced ? '/account/device/bind' : '/checkin'), 1200);
     });
   }
 
   return (
     <main style={{ minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 18 }}>
-      <Link href="/checkin" style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
-        <i className="ti ti-arrow-left" style={{ fontSize: 18 }} aria-hidden></i>
-        <span style={{ fontSize: 13 }}>กลับ</span>
-      </Link>
+      {forced ? (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20, color: '#2e2e32' }}>
+          <i className="ti ti-arrow-left" style={{ fontSize: 18, opacity: 0.3 }} aria-hidden></i>
+          <span style={{ fontSize: 13, fontWeight: 500 }}>ขั้นตอนที่ 1 จาก 3</span>
+        </div>
+      ) : (
+        <Link href="/checkin" style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+          <i className="ti ti-arrow-left" style={{ fontSize: 18 }} aria-hidden></i>
+          <span style={{ fontSize: 13 }}>กลับ</span>
+        </Link>
+      )}
 
       <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 11, color: '#5c5c60' }}>ความปลอดภัย</div>
-        <div style={{ fontSize: 20, fontWeight: 700 }}>เปลี่ยน PIN</div>
+        <div style={{ fontSize: 20, fontWeight: 700 }}>{forced ? 'ตั้ง PIN ใหม่ครั้งแรก' : 'เปลี่ยน PIN'}</div>
+        {forced && (
+          <div style={{ fontSize: 12, color: '#5c5c60', marginTop: 4, lineHeight: 1.5 }}>
+            เพื่อความปลอดภัย โปรดเปลี่ยนจาก PIN เริ่มต้น (123456) เป็นรหัสส่วนตัวของคุณ
+          </div>
+        )}
       </div>
 
       <div style={{ background: '#0e0e10', borderRadius: 18, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-        <Field label="PIN เดิม" value={oldPin} onChange={setOldPin} />
+        <Field label={forced ? 'PIN เดิม (123456)' : 'PIN เดิม'} value={oldPin} onChange={setOldPin} />
         <Field label="PIN ใหม่ (≥6 หลัก)" value={newPin} onChange={setNewPin} />
         <Field label="ยืนยัน PIN ใหม่" value={confirmPin} onChange={setConfirmPin} />
 
@@ -60,12 +89,13 @@ export default function ChangePinPage() {
         )}
         {ok && (
           <div style={{ background: 'rgba(214,242,107,0.15)', color: '#d6f26b', borderRadius: 12, padding: 10, fontSize: 12 }}>
-            <i className="ti ti-check" style={{ fontSize: 13, marginRight: 4, verticalAlign: -2 }} aria-hidden></i>เปลี่ยน PIN สำเร็จ
+            <i className="ti ti-check" style={{ fontSize: 13, marginRight: 4, verticalAlign: -2 }} aria-hidden></i>
+            เปลี่ยน PIN สำเร็จ{forced ? ' — กำลังไปขั้นตอนถัดไป...' : ''}
           </div>
         )}
 
         <button onClick={submit} disabled={pending} style={{ background: '#d6f26b', color: '#0e0e10', border: 'none', borderRadius: 14, padding: 13, fontWeight: 700, fontSize: 14, cursor: 'pointer', marginTop: 4, opacity: pending ? 0.5 : 1 }}>
-          {pending ? 'กำลังบันทึก...' : 'ยืนยันเปลี่ยน PIN'}
+          {pending ? 'กำลังบันทึก...' : forced ? 'ตั้ง PIN แล้วไปต่อ' : 'ยืนยันเปลี่ยน PIN'}
         </button>
       </div>
     </main>

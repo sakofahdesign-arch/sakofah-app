@@ -9,9 +9,12 @@ export default async function BindDevicePage() {
 
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, name, device_id, branch')
+    .select('emp_id, name, line_user_id, pin_changed, branch')
     .eq('id', user.id)
     .single();
+
+  // ต้องเปลี่ยน PIN ก่อนถึงจะผูก LINE ได้
+  if (emp && !emp.pin_changed) redirect('/account/pin');
 
   if (!emp) {
     return (
@@ -26,8 +29,8 @@ export default async function BindDevicePage() {
     );
   }
 
-  // ผูกอุปกรณ์ไปแล้ว → ไปหน้าเช็คอิน (การตรวจ mismatch อยู่ที่นั่น)
-  if (emp.device_id) redirect('/checkin');
+  // ผูก LINE ไปแล้ว → ไปหน้าเช็คอิน
+  if (emp.line_user_id) redirect('/checkin');
 
   // พิกัดสาขา (fallback settings global) สำหรับสเต็ปตรวจสอบที่ตั้ง
   let office: { lat: number; lng: number; radius_m: number; ssid: string | null } | null = null;

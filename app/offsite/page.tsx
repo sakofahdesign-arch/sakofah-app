@@ -4,7 +4,7 @@ import { Suspense, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { getOrCreateDeviceId } from '@/lib/device';
+import { useLiff } from '../LiffProvider';
 import { submitOffsite } from './actions';
 
 // in-app browser (LINE, FB, IG ฯลฯ) มักบล็อก getUserMedia → ต้องใช้กล้องเนทีฟผ่าน file input
@@ -35,8 +35,10 @@ function OffsiteInner() {
   const [location, setLocation] = useState('');
   const [direction, setDirection] = useState<'in' | 'out'>('in');
   const [err, setErr] = useState<string | null>(null);
+  const [camFallback, setCamFallback] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const { inClient, getIdToken } = useLiff();
 
   // Auto-detect direction from today's checkins
   useEffect(() => {
@@ -73,8 +75,9 @@ function OffsiteInner() {
 
   async function startCamera(mode: 'environment' | 'user' = facing) {
     setErr(null);
-    // LINE/in-app browser หรือไม่มี getUserMedia → เปิดกล้องเนทีฟตรงๆ (กันค้าง + กดซ้ำได้)
-    if (isInAppBrowser() || !navigator.mediaDevices?.getUserMedia) {
+    // LINE/in-app หรือเคยล้มเหลวมาแล้ว → เปิดกล้องเนทีฟตรงๆ แบบ sync (ต้องอยู่ใน user gesture)
+    // สำคัญ: ห้ามเรียก .click() หลัง await เพราะจะเสีย user gesture แล้วบราวเซอร์บล็อก
+    if (camFallback || inClient || isInAppBrowser() || !navigator.mediaDevices?.getUserMedia) {
       fileRef.current?.click();
       return;
     }
@@ -91,8 +94,9 @@ function OffsiteInner() {
         await videoRef.current.play();
       }
     } catch {
-      // ถูกบล็อก (LINE Android ฯลฯ) → fallback ไปกล้องเนทีฟของเครื่อง
-      fileRef.current?.click();
+      // กล้องสดใช้ไม่ได้ → เปลี่ยนเป็นโหมดกล้องเนทีฟ (แตะอีกครั้ง = gesture ใหม่)
+      setCamFallback(true);
+      setErr('เปิดกล้องสดไม่ได้ — แตะปุ่มอีกครั้งเพื่อใช้กล้องของอุปกรณ์');
     }
   }
 
@@ -196,12 +200,13 @@ function OffsiteInner() {
     fd.append('lat', String(coords.lat));
     fd.append('lng', String(coords.lng));
     fd.append('location', location);
-    fd.append('device_id', getOrCreateDeviceId());
+    fd.append('idToken', getIdToken() ?? '');
 
     startTransition(async () => {
       const res = await submitOffsite(fd);
-      if (res?.error === 'DEVICE_NOT_BOUND') router.replace('/account/device/bind');
-      else if (res?.error === 'DEVICE_MISMATCH') setErr('เครื่องนี้ไม่ตรงกับที่ลงทะเบียน — โปรดขอเปลี่ยนเครื่อง');
+      if (res?.error === 'LINE_NOT_BOUND') router.replace('/account/device/bind');
+      else if (res?.error === 'LINE_MISMATCH') setErr('บัญชี LINE ไม่ตรงกับที่ลงทะเบียน — ทำแทนกันไม่ได้');
+      else if (res?.error === 'LINE_UNVERIFIED') setErr('ยืนยัน LINE ไม่สำเร็จ — โปรดเปิดผ่านแอป LINE อีกครั้ง');
       else if (res?.error) setErr(res.error);
       else router.push('/checkin');
     });

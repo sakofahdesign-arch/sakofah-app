@@ -1,13 +1,14 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { verifyLineIdToken } from '@/lib/line';
 import { revalidatePath } from 'next/cache';
 
 type CheckinInput = {
   type: 'in' | 'out';
   lat: number;
   lng: number;
-  device_id: string;
+  idToken: string | null;
   wifi_ssid?: string;
 };
 
@@ -27,23 +28,25 @@ export async function submitCheckin(input: CheckinInput) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'ไม่ได้เข้าสู่ระบบ' };
 
-  if (!input.device_id) return { error: 'ไม่พบรหัสอุปกรณ์ — โปรดรีเฟรชหน้า' };
+  // ยืนยันบัญชี LINE ฝั่ง server (กันปลอม userId)
+  const lineUserId = await verifyLineIdToken(input.idToken);
+  if (!lineUserId) return { error: 'LINE_UNVERIFIED' };
 
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, active, device_id, branch')
+    .select('emp_id, active, line_user_id, branch')
     .eq('id', user.id)
     .single();
 
   if (!emp) return { error: 'ไม่พบข้อมูลพนักงาน' };
   if (!emp.active) return { error: 'บัญชีถูกระงับ' };
 
-  // Device binding — ต้องผูกอุปกรณ์ผ่านหน้า onboarding ก่อน (ไม่ผูกแบบ lazy อีกต่อไป)
-  if (!emp.device_id) {
-    return { error: 'DEVICE_NOT_BOUND' };
+  // ต้องผูกบัญชี LINE ผ่านหน้า onboarding ก่อน + ต้องเป็น LINE เดียวกับที่ผูกไว้
+  if (!emp.line_user_id) {
+    return { error: 'LINE_NOT_BOUND' };
   }
-  if (emp.device_id !== input.device_id) {
-    return { error: 'DEVICE_MISMATCH' };
+  if (emp.line_user_id !== lineUserId) {
+    return { error: 'LINE_MISMATCH' };
   }
 
   // GPS check — ใช้พิกัดของสาขาที่พนักงานสังกัด (fallback เป็น settings global)
@@ -112,7 +115,7 @@ export async function submitCheckin(input: CheckinInput) {
     type: input.type,
     lat: input.lat,
     lng: input.lng,
-    device_id: input.device_id,
+    device_id: lineUserId,
     wifi_ssid: input.wifi_ssid ?? null,
     status: 'approved',
   });
