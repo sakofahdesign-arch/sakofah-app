@@ -26,7 +26,7 @@ export const useLiff = () => useContext(LiffCtx);
 
 const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID;
 const LIME = '#d6f26b';
-const LIFF_INIT_TIMEOUT_MS = 12000;
+const LIFF_INIT_TIMEOUT_MS = 4500;
 const LIFF_PROFILE_TIMEOUT_MS = 8000;
 
 // path ที่เปิดนอก LINE ได้ (admin ใช้ desktop, login สำหรับ admin)
@@ -98,18 +98,32 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, [pathname, retryKey]);
 
-  if (phase === 'loading') return <FullScreen title="กำลังเชื่อมต่อ LINE..." icon="loader-2" spin />;
+  if (phase === 'loading') {
+    return (
+      <FullScreen title="เปิดผ่านแอป LINE" icon="brand-line"
+        sub="หากหน้านี้ไม่ไปต่อ ให้เปิด LIFF ใหม่ หรือเข้าสู่ระบบพนักงานก่อน">
+        <ActionRow>
+          <a href={`https://liff.line.me/${LIFF_ID}`} style={linkButtonStyle}>
+            เปิด LIFF ใหม่
+          </a>
+          <a href="/login" style={secondaryLinkButtonStyle}>
+            เข้าสู่ระบบ
+          </a>
+        </ActionRow>
+      </FullScreen>
+    );
+  }
 
   if (phase === 'line-login' && !isExempt(pathname)) {
     return (
       <FullScreen title="ยืนยันตัวตน LINE" icon="brand-line"
         sub="โปรดกดยืนยันหนึ่งครั้งเพื่อให้ LINE ส่ง token กลับมาที่ระบบ หากกดแล้วกลับมาหน้าเดิม ให้ปิดแท็บนี้แล้วเปิดผ่านลิงก์ LIFF ใหม่">
         <ActionRow>
-          <button type="button" onClick={() => liff.login({ redirectUri: window.location.href })} style={buttonStyle}>
-            ยืนยันผ่าน LINE
-          </button>
           <a href={`https://liff.line.me/${LIFF_ID}`} style={linkButtonStyle}>
             เปิด LIFF ใหม่
+          </a>
+          <a href="/login" style={secondaryLinkButtonStyle}>
+            เข้าสู่ระบบ
           </a>
         </ActionRow>
       </FullScreen>
@@ -125,6 +139,9 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
         </button>
         <a href={`https://liff.line.me/${LIFF_ID}`} style={linkButtonStyle}>
           เปิดใน LINE
+        </a>
+        <a href="/login" style={secondaryLinkButtonStyle}>
+          เข้าสู่ระบบ
         </a>
       </ActionRow>
     </FullScreen>;
@@ -196,5 +213,12 @@ const buttonStyle = {
 const linkButtonStyle = {
   ...buttonBaseStyle,
   background: LIME,
+  textDecoration: 'none',
+} satisfies CSSProperties;
+
+const secondaryLinkButtonStyle = {
+  ...buttonBaseStyle,
+  background: '#0e0e10',
+  color: '#fff',
   textDecoration: 'none',
 } satisfies CSSProperties;
