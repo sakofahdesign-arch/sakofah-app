@@ -2,7 +2,7 @@
 
 import liff from '@line/liff';
 import { usePathname } from 'next/navigation';
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 
 type LiffProfile = { userId: string; displayName: string; pictureUrl?: string };
 
@@ -12,6 +12,8 @@ type LiffState = {
   profile: LiffProfile | null;
   getIdToken: () => string | null;
 };
+
+type LiffPhase = 'idle' | 'loading' | 'ready' | 'error';
 
 const LiffCtx = createContext<LiffState>({
   ready: false,
@@ -24,54 +26,111 @@ export const useLiff = () => useContext(LiffCtx);
 
 const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID;
 const LIME = '#d6f26b';
+const LIFF_INIT_TIMEOUT_MS = 12000;
+const LIFF_PROFILE_TIMEOUT_MS = 8000;
 
 // path ที่เปิดนอก LINE ได้ (admin ใช้ desktop, login สำหรับ admin)
 function isExempt(pathname: string) {
   return pathname.startsWith('/admin') || pathname.startsWith('/login');
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string) {
+  return new Promise<T>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(`${label} timed out`)), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 export default function LiffProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>(LIFF_ID ? 'loading' : 'ready');
+  const [phase, setPhase] = useState<LiffPhase>(LIFF_ID && !isExempt(pathname) ? 'idle' : 'ready');
   const [inClient, setInClient] = useState(false);
   const [profile, setProfile] = useState<LiffProfile | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   useEffect(() => {
-    if (!LIFF_ID) return; // ไม่ได้ตั้งค่า (local/build) → ข้าม gate
+    if (!LIFF_ID || isExempt(pathname)) return;
+
     let cancelled = false;
+
     (async () => {
+      setPhase('loading');
+      setInClient(false);
+      setProfile(null);
+
       try {
-        await liff.init({ liffId: LIFF_ID });
+        await withTimeout(
+          liff.init({ liffId: LIFF_ID, withLoginOnExternalBrowser: true }),
+          LIFF_INIT_TIMEOUT_MS,
+          'LIFF init',
+        );
         if (cancelled) return;
+
         if (liff.isInClient()) {
-          if (!liff.isLoggedIn()) { liff.login(); return; } // reload กลับมาเอง
-          const prof = await liff.getProfile();
-          if (cancelled) return;
-          setProfile({ userId: prof.userId, displayName: prof.displayName, pictureUrl: prof.pictureUrl });
           setInClient(true);
+
+          if (!liff.isLoggedIn()) {
+            liff.login();
+            return; // reload กลับมาเอง
+          }
+
+          const prof = await withTimeout(liff.getProfile(), LIFF_PROFILE_TIMEOUT_MS, 'LIFF profile');
+          if (cancelled) return;
+
+          setProfile({ userId: prof.userId, displayName: prof.displayName, pictureUrl: prof.pictureUrl });
         }
+
         setPhase('ready');
       } catch {
         if (!cancelled) setPhase('error');
       }
     })();
+
     return () => { cancelled = true; };
-  }, []);
+  }, [pathname, retryKey]);
 
   if (phase === 'loading') return <FullScreen title="กำลังเชื่อมต่อ LINE..." icon="loader-2" spin />;
 
   if (phase === 'error' && !isExempt(pathname)) {
     return <FullScreen title="เชื่อมต่อ LINE ไม่สำเร็จ" icon="alert-triangle"
-      sub="โปรดปิดแล้วเปิดใหม่ผ่านลิงก์ในแอป LINE อีกครั้ง หากยังไม่ได้ติดต่อผู้ดูแลระบบ" />;
+      sub="โปรดปิดแล้วเปิดใหม่ผ่านลิงก์ในแอป LINE อีกครั้ง หากยังไม่ได้ติดต่อผู้ดูแลระบบ">
+      <ActionRow>
+        <button type="button" onClick={() => setRetryKey((key) => key + 1)} style={buttonStyle}>
+          ลองใหม่
+        </button>
+        <a href={`https://liff.line.me/${LIFF_ID}`} style={linkButtonStyle}>
+          เปิดใน LINE
+        </a>
+      </ActionRow>
+    </FullScreen>;
   }
 
   // บังคับเปิดผ่าน LINE เท่านั้น (ยกเว้นหน้า admin/login)
+  if (LIFF_ID && phase !== 'ready' && !isExempt(pathname)) {
+    return (
+      <FullScreen title="กรุณาเปิดผ่านแอป LINE" icon="brand-line"
+        sub="แอปนี้ใช้ได้เฉพาะภายในแอป LINE เท่านั้น เพื่อยืนยันตัวตนและป้องกันการลงเวลาแทนกัน">
+        <a href={`https://liff.line.me/${LIFF_ID}`} style={linkButtonStyle}>
+          เปิดใน LINE
+        </a>
+      </FullScreen>
+    );
+  }
+
   if (LIFF_ID && !inClient && !isExempt(pathname)) {
     return (
       <FullScreen title="กรุณาเปิดผ่านแอป LINE" icon="brand-line"
         sub="แอปนี้ใช้ได้เฉพาะภายในแอป LINE เท่านั้น เพื่อยืนยันตัวตนและป้องกันการลงเวลาแทนกัน">
-        <a href={`https://liff.line.me/${LIFF_ID}`}
-          style={{ marginTop: 18, background: LIME, color: '#0e0e10', borderRadius: 14, padding: '13px 22px', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
+        <a href={`https://liff.line.me/${LIFF_ID}`} style={linkButtonStyle}>
           เปิดใน LINE
         </a>
       </FullScreen>
@@ -98,3 +157,28 @@ function FullScreen({ title, sub, icon, spin, children }: {
     </main>
   );
 }
+
+function ActionRow({ children }: { children: ReactNode }) {
+  return <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap', justifyContent: 'center' }}>{children}</div>;
+}
+
+const buttonBaseStyle = {
+  color: '#0e0e10',
+  borderRadius: 14,
+  padding: '13px 22px',
+  fontWeight: 700,
+  fontSize: 14,
+} satisfies CSSProperties;
+
+const buttonStyle = {
+  ...buttonBaseStyle,
+  background: LIME,
+  border: 0,
+  cursor: 'pointer',
+} satisfies CSSProperties;
+
+const linkButtonStyle = {
+  ...buttonBaseStyle,
+  background: LIME,
+  textDecoration: 'none',
+} satisfies CSSProperties;
