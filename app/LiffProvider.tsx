@@ -106,7 +106,7 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
           <a href={`https://liff.line.me/${LIFF_ID}`} style={linkButtonStyle}>
             เปิด LIFF ใหม่
           </a>
-          <a href="/login" style={secondaryLinkButtonStyle}>
+          <a href="/logout" style={secondaryLinkButtonStyle}>
             เข้าสู่ระบบ
           </a>
         </ActionRow>
@@ -122,7 +122,7 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
           <a href={`https://liff.line.me/${LIFF_ID}`} style={linkButtonStyle}>
             เปิด LIFF ใหม่
           </a>
-          <a href="/login" style={secondaryLinkButtonStyle}>
+          <a href="/logout" style={secondaryLinkButtonStyle}>
             เข้าสู่ระบบ
           </a>
         </ActionRow>
@@ -140,7 +140,7 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
         <a href={`https://liff.line.me/${LIFF_ID}`} style={linkButtonStyle}>
           เปิดใน LINE
         </a>
-        <a href="/login" style={secondaryLinkButtonStyle}>
+        <a href="/logout" style={secondaryLinkButtonStyle}>
           เข้าสู่ระบบ
         </a>
       </ActionRow>
