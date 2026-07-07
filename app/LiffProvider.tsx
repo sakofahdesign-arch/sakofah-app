@@ -2,7 +2,7 @@
 
 import liff from '@line/liff';
 import { usePathname } from 'next/navigation';
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
 type LiffProfile = { userId: string; displayName: string; pictureUrl?: string };
 
@@ -34,39 +34,80 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>(LIFF_ID ? 'loading' : 'ready');
   const [inClient, setInClient] = useState(false);
-  const [debugError, setDebugError] = useState<string>(''); // เพิ่มบรรทัดนี้
   const [profile, setProfile] = useState<LiffProfile | null>(null);
 
+  // ชั่วคราว: ไว้ debug ปัญหา Android ค้างหมุน — ลบออกทีหลังหลัง fix เสร็จ
+  const [debugError, setDebugError] = useState<string>('');
+  const [debugTrail, setDebugTrail] = useState<string>('start');
+  const [timedOut, setTimedOut] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
-    if (!LIFF_ID) return; // ไม่ได้ตั้งค่า (local/build) → ข้าม gate
+    if (!LIFF_ID) return;
     let cancelled = false;
+
+    // ชั่วคราว: ถ้าค้างเกิน 10 วิ โชว์ debug trail ให้เห็นแม้ยัง "loading" อยู่
+    timeoutRef.current = setTimeout(() => {
+      if (!cancelled) setTimedOut(true);
+    }, 10000);
+
     (async () => {
       try {
+        setDebugTrail(t => t + ' > calling init');
         await liff.init({ liffId: LIFF_ID });
+        setDebugTrail(t => t + ' > init done');
         if (cancelled) return;
         if (liff.isInClient()) {
-          if (!liff.isLoggedIn()) { liff.login(); return; } // reload กลับมาเอง
+          setDebugTrail(t => t + ' > inClient=true');
+          if (!liff.isLoggedIn()) {
+            setDebugTrail(t => t + ' > not logged in, calling login()');
+            liff.login();
+            return;
+          }
+          setDebugTrail(t => t + ' > logged in, getting profile');
           const prof = await liff.getProfile();
+          setDebugTrail(t => t + ' > profile got');
           if (cancelled) return;
           setProfile({ userId: prof.userId, displayName: prof.displayName, pictureUrl: prof.pictureUrl });
           setInClient(true);
+        } else {
+          setDebugTrail(t => t + ' > inClient=false');
         }
         setPhase('ready');
       } catch (err) {
+        setDebugTrail(t => t + ' > ERROR CAUGHT');
         if (!cancelled) {
-          setDebugError(err instanceof Error ? err.message : String(err));
+          setDebugError(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
           setPhase('error');
         }
+      } finally {
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
       }
     })();
-    return () => { cancelled = true; };
+
+    return () => {
+      cancelled = true;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
   }, []);
 
-  if (phase === 'loading') return <FullScreen title="กำลังเชื่อมต่อ LINE..." icon="loader-2" spin />;
+  if (phase === 'loading') {
+    return (
+      <FullScreen title="กำลังเชื่อมต่อ LINE..." icon="loader-2" spin
+        sub={timedOut ? `DEBUG (ค้างเกิน 10 วิ): ${debugTrail}` : undefined}>
+        {timedOut && (
+          <a href={typeof window !== 'undefined' ? window.location.href : '#'}
+            style={{ marginTop: 18, background: LIME, color: '#0e0e10', borderRadius: 14, padding: '13px 22px', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}>
+            ลองโหลดใหม่
+          </a>
+        )}
+      </FullScreen>
+    );
+  }
 
   if (phase === 'error' && !isExempt(pathname)) {
     return <FullScreen title="เชื่อมต่อ LINE ไม่สำเร็จ" icon="alert-triangle"
-      sub={`DEBUG: ${debugError}`} />;
+      sub={`DEBUG: ${debugTrail} | ${debugError}`} />;
   }
 
   // บังคับเปิดผ่าน LINE เท่านั้น (ยกเว้นหน้า admin/login)
