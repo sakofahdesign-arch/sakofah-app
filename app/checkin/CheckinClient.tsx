@@ -2,9 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { submitCheckin, signOut } from './actions';
-import { useLiff } from '../LiffProvider';
 
 type Props = {
   empName: string;
@@ -48,8 +46,6 @@ function earlyMin(ts: string, workEnd: string): number {
 const HOLD_DURATION = 1000; // 1 วินาที
 
 export default function CheckinClient({ empName, empId, role, todayCheckins, settings }: Props) {
-  const router = useRouter();
-  const { getIdToken } = useLiff();
   const [now, setNow] = useState<Date | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -134,14 +130,8 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
     setSparkle(true);
     setTimeout(() => setSparkle(false), 800);
     startTransition(async () => {
-      const res = await submitCheckin({ type, lat: coords!.lat, lng: coords!.lng, idToken: getIdToken() });
-      if (res?.error === 'LINE_NOT_BOUND') {
-        router.replace('/account/device/bind');
-      } else if (res?.error === 'LINE_MISMATCH') {
-        setToast({ kind: 'err', msg: 'บัญชี LINE ไม่ตรงกับที่ลงทะเบียน — เช็คอินแทนกันไม่ได้' });
-      } else if (res?.error === 'LINE_UNVERIFIED') {
-        setToast({ kind: 'err', msg: 'ยืนยัน LINE ไม่สำเร็จ — โปรดเปิดผ่านแอป LINE อีกครั้ง' });
-      } else if (res?.error) {
+      const res = await submitCheckin({ type, lat: coords!.lat, lng: coords!.lng });
+      if (res?.error) {
         setToast({ kind: 'err', msg: res.error });
       } else {
         const ws = settings?.work_start ?? '08:20';
@@ -338,7 +328,7 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
       )}
 
       <div style={{ marginTop: 14, textAlign: 'center', fontSize: 10, color: '#5c5c60' }}>
-        {empId} · 1 บัญชี LINE = 1 พนักงาน
+        {empId}
       </div>
 
       {toast && (

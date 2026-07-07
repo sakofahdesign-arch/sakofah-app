@@ -4,7 +4,6 @@ import { Suspense, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { useLiff } from '../LiffProvider';
 import { submitOffsite } from './actions';
 
 // in-app browser (LINE, FB, IG ฯลฯ) มักบล็อก getUserMedia → ต้องใช้กล้องเนทีฟผ่าน file input
@@ -38,7 +37,6 @@ function OffsiteInner() {
   const [camFallback, setCamFallback] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
-  const { inClient, getIdToken } = useLiff();
 
   // Auto-detect direction from today's checkins
   useEffect(() => {
@@ -77,7 +75,7 @@ function OffsiteInner() {
     setErr(null);
     // LINE/in-app หรือเคยล้มเหลวมาแล้ว → เปิดกล้องเนทีฟตรงๆ แบบ sync (ต้องอยู่ใน user gesture)
     // สำคัญ: ห้ามเรียก .click() หลัง await เพราะจะเสีย user gesture แล้วบราวเซอร์บล็อก
-    if (camFallback || inClient || isInAppBrowser() || !navigator.mediaDevices?.getUserMedia) {
+    if (camFallback || isInAppBrowser() || !navigator.mediaDevices?.getUserMedia) {
       fileRef.current?.click();
       return;
     }
@@ -200,14 +198,10 @@ function OffsiteInner() {
     fd.append('lat', String(coords.lat));
     fd.append('lng', String(coords.lng));
     fd.append('location', location);
-    fd.append('idToken', getIdToken() ?? '');
 
     startTransition(async () => {
       const res = await submitOffsite(fd);
-      if (res?.error === 'LINE_NOT_BOUND') router.replace('/account/device/bind');
-      else if (res?.error === 'LINE_MISMATCH') setErr('บัญชี LINE ไม่ตรงกับที่ลงทะเบียน — ทำแทนกันไม่ได้');
-      else if (res?.error === 'LINE_UNVERIFIED') setErr('ยืนยัน LINE ไม่สำเร็จ — โปรดเปิดผ่านแอป LINE อีกครั้ง');
-      else if (res?.error) setErr(res.error);
+      if (res?.error) setErr(res.error);
       else router.push('/checkin');
     });
   }

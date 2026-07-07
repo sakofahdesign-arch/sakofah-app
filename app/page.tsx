@@ -9,14 +9,13 @@ export default async function Home() {
 
   const { data: profile } = await supabase
     .from('employees')
-    .select('role, pin_changed, line_user_id')
+    .select('role, pin_changed')
     .eq('id', user.id)
     .single();
 
   if (profile?.role === 'admin') redirect('/admin');
 
-  // onboarding ตามลำดับ: เปลี่ยน PIN → ผูก LINE → เช็คอิน
+  // onboarding ตามลำดับ: เปลี่ยน PIN → เช็คอิน
   if (profile && !profile.pin_changed) redirect('/account/pin');
-  if (profile && !profile.line_user_id) redirect('/account/device/bind');
   redirect('/checkin');
 }

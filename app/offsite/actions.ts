@@ -1,7 +1,6 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { verifyLineIdToken } from '@/lib/line';
 import { revalidatePath } from 'next/cache';
 
 export async function submitOffsite(formData: FormData) {
@@ -9,25 +8,13 @@ export async function submitOffsite(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: 'ไม่ได้เข้าสู่ระบบ' };
 
-  // ยืนยันบัญชี LINE ฝั่ง server
-  const lineUserId = await verifyLineIdToken(formData.get('idToken') as string | null);
-  if (!lineUserId) return { error: 'LINE_UNVERIFIED' };
-
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, active, line_user_id')
+    .select('emp_id, active')
     .eq('id', user.id)
     .single();
 
   if (!emp || !emp.active) return { error: 'ไม่พบข้อมูลพนักงาน' };
-
-  // ต้องผูกบัญชี LINE ผ่านหน้า onboarding ก่อน + ต้องเป็น LINE เดียวกับที่ผูกไว้
-  if (!emp.line_user_id) {
-    return { error: 'LINE_NOT_BOUND' };
-  }
-  if (emp.line_user_id !== lineUserId) {
-    return { error: 'LINE_MISMATCH' };
-  }
 
   // Auto-detect direction from today's checkins
   const today = new Date().toISOString().slice(0, 10);

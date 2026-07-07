@@ -9,13 +9,12 @@ export default async function CheckinPage() {
 
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, name, role, line_user_id, pin_changed')
+    .select('emp_id, name, role, pin_changed')
     .eq('id', user.id)
     .single();
 
-  // onboarding guard: เปลี่ยน PIN → ผูก LINE ก่อนถึงจะเช็คอินได้
+  // onboarding guard: เปลี่ยน PIN ก่อนถึงจะเช็คอินได้
   if (emp && !emp.pin_changed) redirect('/account/pin');
-  if (emp && !emp.line_user_id) redirect('/account/device/bind');
 
   if (!emp) {
     return (
