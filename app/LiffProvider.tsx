@@ -34,6 +34,7 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [phase, setPhase] = useState<'loading' | 'ready' | 'error'>(LIFF_ID ? 'loading' : 'ready');
   const [inClient, setInClient] = useState(false);
+  const [debugError, setDebugError] = useState<string>(''); // เพิ่มบรรทัดนี้
   const [profile, setProfile] = useState<LiffProfile | null>(null);
 
   useEffect(() => {
@@ -51,8 +52,11 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
           setInClient(true);
         }
         setPhase('ready');
-      } catch {
-        if (!cancelled) setPhase('error');
+      } catch (err) {
+        if (!cancelled) {
+          setDebugError(err instanceof Error ? err.message : String(err));
+          setPhase('error');
+        }
       }
     })();
     return () => { cancelled = true; };
@@ -62,7 +66,7 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
 
   if (phase === 'error' && !isExempt(pathname)) {
     return <FullScreen title="เชื่อมต่อ LINE ไม่สำเร็จ" icon="alert-triangle"
-      sub="โปรดปิดแล้วเปิดใหม่ผ่านลิงก์ในแอป LINE อีกครั้ง หากยังไม่ได้ติดต่อผู้ดูแลระบบ" />;
+      sub={`DEBUG: ${debugError}`} />;
   }
 
   // บังคับเปิดผ่าน LINE เท่านั้น (ยกเว้นหน้า admin/login)
