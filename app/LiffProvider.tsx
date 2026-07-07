@@ -13,7 +13,7 @@ type LiffState = {
   getIdToken: () => string | null;
 };
 
-type LiffPhase = 'idle' | 'loading' | 'ready' | 'error';
+type LiffPhase = 'idle' | 'loading' | 'ready' | 'line-login' | 'error';
 
 const LiffCtx = createContext<LiffState>({
   ready: false,
@@ -79,8 +79,8 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
           setInClient(true);
 
           if (!liff.isLoggedIn()) {
-            liff.login();
-            return; // reload กลับมาเอง
+            setPhase('line-login');
+            return;
           }
 
           const prof = await withTimeout(liff.getProfile(), LIFF_PROFILE_TIMEOUT_MS, 'LIFF profile');
@@ -99,6 +99,22 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
   }, [pathname, retryKey]);
 
   if (phase === 'loading') return <FullScreen title="กำลังเชื่อมต่อ LINE..." icon="loader-2" spin />;
+
+  if (phase === 'line-login' && !isExempt(pathname)) {
+    return (
+      <FullScreen title="ยืนยันตัวตน LINE" icon="brand-line"
+        sub="โปรดกดยืนยันหนึ่งครั้งเพื่อให้ LINE ส่ง token กลับมาที่ระบบ หากกดแล้วกลับมาหน้าเดิม ให้ปิดแท็บนี้แล้วเปิดผ่านลิงก์ LIFF ใหม่">
+        <ActionRow>
+          <button type="button" onClick={() => liff.login({ redirectUri: window.location.href })} style={buttonStyle}>
+            ยืนยันผ่าน LINE
+          </button>
+          <a href={`https://liff.line.me/${LIFF_ID}`} style={linkButtonStyle}>
+            เปิด LIFF ใหม่
+          </a>
+        </ActionRow>
+      </FullScreen>
+    );
+  }
 
   if (phase === 'error' && !isExempt(pathname)) {
     return <FullScreen title="เชื่อมต่อ LINE ไม่สำเร็จ" icon="alert-triangle"
