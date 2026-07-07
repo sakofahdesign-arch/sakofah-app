@@ -10,11 +10,13 @@ export async function submitOffsite(formData: FormData) {
 
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, active')
+    .select('emp_id, active, device_id')
     .eq('id', user.id)
     .single();
 
   if (!emp || !emp.active) return { error: 'ไม่พบข้อมูลพนักงาน' };
+  const deviceId = (formData.get('deviceId') as string)?.trim();
+  if (!deviceId || emp.device_id !== deviceId) return { error: 'DEVICE_MISMATCH' };
 
   // Auto-detect direction from today's checkins
   const today = new Date().toISOString().slice(0, 10);

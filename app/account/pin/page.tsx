@@ -48,8 +48,7 @@ export default function ChangePinPage() {
       await supabase.rpc('mark_pin_changed');
 
       setOk(true);
-      // onboarding: เปลี่ยน PIN แล้วไปผูก LINE ต่อ; ไม่ใช่โหมดบังคับ → กลับหน้าเช็คอิน
-      setTimeout(() => router.replace(forced ? '/account/device/bind' : '/checkin'), 1200);
+      setTimeout(() => router.replace('/checkin'), 1200);
     });
   }
 

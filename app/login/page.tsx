@@ -1,17 +1,28 @@
 'use client';
 
 import { useState, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import { login } from './actions';
+import { getDeviceInfo, getOrCreateDeviceId } from '@/lib/device';
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [showPin, setShowPin] = useState(false);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   function handleSubmit(formData: FormData) {
     setError(null);
+    const info = getDeviceInfo();
+    formData.set('device_id', getOrCreateDeviceId());
+    formData.set('device_label', [info.label, info.model, info.os].filter(Boolean).join(' · '));
     startTransition(async () => {
       const result = await login(formData);
+      if (result?.deviceMismatch) {
+        setError(result.error);
+        router.push('/account/device');
+        return;
+      }
       if (result?.error) setError(result.error);
     });
   }

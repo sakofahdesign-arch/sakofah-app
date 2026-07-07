@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { submitCheckin, signOut } from './actions';
+import { getOrCreateDeviceId } from '@/lib/device';
 
 type Props = {
   empName: string;
@@ -46,6 +48,7 @@ function earlyMin(ts: string, workEnd: string): number {
 const HOLD_DURATION = 1000; // 1 วินาที
 
 export default function CheckinClient({ empName, empId, role, todayCheckins, settings }: Props) {
+  const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
@@ -130,8 +133,13 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
     setSparkle(true);
     setTimeout(() => setSparkle(false), 800);
     startTransition(async () => {
-      const res = await submitCheckin({ type, lat: coords!.lat, lng: coords!.lng });
+      const deviceId = getOrCreateDeviceId();
+      const res = await submitCheckin({ type, lat: coords!.lat, lng: coords!.lng, deviceId });
       if (res?.error) {
+        if (res.error === 'DEVICE_MISMATCH') {
+          router.replace('/account/device');
+          return;
+        }
         setToast({ kind: 'err', msg: res.error });
       } else {
         const ws = settings?.work_start ?? '08:20';

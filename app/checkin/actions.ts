@@ -7,6 +7,7 @@ type CheckinInput = {
   type: 'in' | 'out';
   lat: number;
   lng: number;
+  deviceId: string;
   wifi_ssid?: string;
 };
 
@@ -28,12 +29,13 @@ export async function submitCheckin(input: CheckinInput) {
 
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, active, branch')
+    .select('emp_id, active, branch, device_id')
     .eq('id', user.id)
     .single();
 
   if (!emp) return { error: 'ไม่พบข้อมูลพนักงาน' };
   if (!emp.active) return { error: 'บัญชีถูกระงับ' };
+  if (!input.deviceId || emp.device_id !== input.deviceId) return { error: 'DEVICE_MISMATCH' };
 
   // GPS check — ใช้พิกัดของสาขาที่พนักงานสังกัด (fallback เป็น settings global)
   let officeLat: number | null = null;
@@ -101,7 +103,7 @@ export async function submitCheckin(input: CheckinInput) {
     type: input.type,
     lat: input.lat,
     lng: input.lng,
-    device_id: user.id,
+    device_id: input.deviceId,
     wifi_ssid: input.wifi_ssid ?? null,
     status: 'approved',
   });

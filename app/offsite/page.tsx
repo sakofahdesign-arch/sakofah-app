@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { submitOffsite } from './actions';
+import { getOrCreateDeviceId } from '@/lib/device';
 
 // in-app browser (LINE, FB, IG ฯลฯ) มักบล็อก getUserMedia → ต้องใช้กล้องเนทีฟผ่าน file input
 function isInAppBrowser(): boolean {
@@ -198,10 +199,12 @@ function OffsiteInner() {
     fd.append('lat', String(coords.lat));
     fd.append('lng', String(coords.lng));
     fd.append('location', location);
+    fd.append('deviceId', getOrCreateDeviceId());
 
     startTransition(async () => {
       const res = await submitOffsite(fd);
-      if (res?.error) setErr(res.error);
+      if (res?.error === 'DEVICE_MISMATCH') router.replace('/account/device');
+      else if (res?.error) setErr(res.error);
       else router.push('/checkin');
     });
   }
