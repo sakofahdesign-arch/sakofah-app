@@ -17,6 +17,11 @@ export function getDeviceId(): string | null {
   return localStorage.getItem(KEY);
 }
 
+export function clearDeviceId(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(KEY);
+}
+
 export function getDeviceLabel(): string {
   if (typeof window === 'undefined') return '';
   const ua = navigator.userAgent;

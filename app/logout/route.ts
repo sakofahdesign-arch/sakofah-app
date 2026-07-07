@@ -5,5 +5,5 @@ export async function GET(request: NextRequest) {
   const supabase = await createClient();
   await supabase.auth.signOut();
 
-  return NextResponse.redirect(new URL('/login', request.url));
+  return NextResponse.redirect(new URL('/login?clearDevice=1', request.url));
 }

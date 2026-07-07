@@ -1,15 +1,24 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { login } from './actions';
-import { getDeviceInfo, getOrCreateDeviceId } from '@/lib/device';
+import { clearDeviceId, getDeviceInfo, getOrCreateDeviceId } from '@/lib/device';
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [showPin, setShowPin] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('clearDevice') !== '1') return;
+    clearDeviceId();
+    url.searchParams.delete('clearDevice');
+    window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   function handleSubmit(formData: FormData) {
     setError(null);
