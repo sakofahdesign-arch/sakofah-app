@@ -35,6 +35,7 @@ export async function submitCheckin(input: CheckinInput) {
 
   if (!emp) return { error: 'ไม่พบข้อมูลพนักงาน' };
   if (!emp.active) return { error: 'บัญชีถูกระงับ' };
+  if (!emp.device_id) return { error: 'DEVICE_NOT_BOUND' };
   if (!input.deviceId || emp.device_id !== input.deviceId) return { error: 'DEVICE_MISMATCH' };
 
   // GPS check — ใช้พิกัดของสาขาที่พนักงานสังกัด (fallback เป็น settings global)

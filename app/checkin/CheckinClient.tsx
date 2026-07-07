@@ -136,6 +136,10 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
       const deviceId = getOrCreateDeviceId();
       const res = await submitCheckin({ type, lat: coords!.lat, lng: coords!.lng, deviceId });
       if (res?.error) {
+        if (res.error === 'DEVICE_NOT_BOUND') {
+          router.replace('/account/device/bind');
+          return;
+        }
         if (res.error === 'DEVICE_MISMATCH') {
           router.replace('/account/device');
           return;

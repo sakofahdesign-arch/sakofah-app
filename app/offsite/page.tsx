@@ -203,7 +203,8 @@ function OffsiteInner() {
 
     startTransition(async () => {
       const res = await submitOffsite(fd);
-      if (res?.error === 'DEVICE_MISMATCH') router.replace('/account/device');
+      if (res?.error === 'DEVICE_NOT_BOUND') router.replace('/account/device/bind');
+      else if (res?.error === 'DEVICE_MISMATCH') router.replace('/account/device');
       else if (res?.error) setErr(res.error);
       else router.push('/checkin');
     });
@@ -213,6 +214,7 @@ function OffsiteInner() {
   const dirText = direction === 'in' ? '#0e0e10' : '#501313';
   const dirLabel = direction === 'in' ? 'Off-site IN' : 'Off-site OUT';
   const dirIcon = direction === 'in' ? 'arrow-big-up-line-filled' : 'arrow-big-down-line-filled';
+  const nativeCapture = camFallback || isInAppBrowser() || typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia;
 
   return (
     <main style={{ minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 18 }}>
@@ -232,14 +234,28 @@ function OffsiteInner() {
       {/* Camera */}
       <div style={{ borderRadius: 20, overflow: 'hidden', background: '#0e0e10', height: 320, position: 'relative', marginBottom: 12 }}>
         {!stream && !photoUrl && (
-          <button onClick={() => startCamera()} style={{
-            position: 'absolute', inset: 0, background: '#0e0e10', color: '#fff', border: 'none', cursor: 'pointer',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10
-          }}>
-            <i className="ti ti-camera" style={{ fontSize: 44, color: dirColor }} aria-hidden></i>
-            <span style={{ fontSize: 14, fontWeight: 600 }}>แตะเพื่อเปิดกล้อง</span>
-            <span style={{ fontSize: 11, color: '#c9c9cc' }}>ระบบจะขออนุญาตเข้าถึงกล้อง</span>
-          </button>
+          <>
+            <button onClick={() => startCamera()} style={{
+              position: 'absolute', inset: 0, background: '#0e0e10', color: '#fff', border: 'none', cursor: 'pointer',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10
+            }}>
+              <i className="ti ti-camera" style={{ fontSize: 44, color: dirColor }} aria-hidden></i>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>แตะเพื่อเปิดกล้อง</span>
+              <span style={{ fontSize: 11, color: '#c9c9cc' }}>
+                {nativeCapture ? 'LINE จะเปิดกล้องของเครื่องโดยตรง' : 'ระบบจะขออนุญาตเข้าถึงกล้อง'}
+              </span>
+            </button>
+            {nativeCapture && (
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleFile}
+                aria-label="เปิดกล้อง"
+                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
+              />
+            )}
+          </>
         )}
         <video
           ref={videoRef}

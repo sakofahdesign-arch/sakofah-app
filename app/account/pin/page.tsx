@@ -48,7 +48,7 @@ export default function ChangePinPage() {
       await supabase.rpc('mark_pin_changed');
 
       setOk(true);
-      setTimeout(() => router.replace('/checkin'), 1200);
+      setTimeout(() => router.replace(forced ? '/account/device/bind' : '/checkin'), 1200);
     });
   }
 

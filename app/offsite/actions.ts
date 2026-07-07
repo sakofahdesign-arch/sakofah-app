@@ -16,6 +16,7 @@ export async function submitOffsite(formData: FormData) {
 
   if (!emp || !emp.active) return { error: 'ไม่พบข้อมูลพนักงาน' };
   const deviceId = (formData.get('deviceId') as string)?.trim();
+  if (!emp.device_id) return { error: 'DEVICE_NOT_BOUND' };
   if (!deviceId || emp.device_id !== deviceId) return { error: 'DEVICE_MISMATCH' };
 
   // Auto-detect direction from today's checkins

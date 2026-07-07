@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import InAppBrowserGuard from "./InAppBrowserGuard";
 
 export const metadata: Metadata = {
   title: "Sakofah Islamic — ระบบลงเวลาพนักงาน",
@@ -50,9 +49,7 @@ export default function RootLayout({
           href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.17.0/dist/tabler-icons.min.css"
         />
       </head>
-      <body className="min-h-full">
-        <InAppBrowserGuard>{children}</InAppBrowserGuard>
-      </body>
+      <body className="min-h-full">{children}</body>
     </html>
   );
 }
