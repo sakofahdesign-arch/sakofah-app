@@ -69,7 +69,7 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
 
       try {
         await withTimeout(
-          liff.init({ liffId: LIFF_ID, withLoginOnExternalBrowser: true }),
+          liff.init({ liffId: LIFF_ID }),
           LIFF_INIT_TIMEOUT_MS,
           'LIFF init',
         );
