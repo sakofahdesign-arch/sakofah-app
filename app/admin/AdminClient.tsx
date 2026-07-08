@@ -418,6 +418,16 @@ export default function AdminClient({
       }),
     ];
     ws3['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 1, c: 0 }, e: { r: empRows.length - 1, c: empRows[0].length - 1 } }) };
+    const onTimeCellStyle = {
+      fill: { fgColor: { rgb: 'C6E0B4' } },
+      font: { color: { rgb: '274E13' }, bold: true },
+      alignment: { horizontal: 'center' },
+    };
+    const warningCellStyle = {
+      fill: { fgColor: { rgb: 'F4CCCC' } },
+      font: { color: { rgb: '9C0006' }, bold: true },
+      alignment: { horizontal: 'center' },
+    };
     sortedEmployeeStats.forEach(({ employee: e }, rowIndex) => {
       for (let day = 1; day <= daysInMonth; day++) {
         const pair = byEmpDay.get(`${e.emp_id}|${day}`);
@@ -426,17 +436,11 @@ export default function AdminClient({
         const row = rowIndex + 2;
         const inAddr = XLSX.utils.encode_cell({ r: row, c: inCol });
         const outAddr = XLSX.utils.encode_cell({ r: row, c: outCol });
-        if (pair?.in && minutesOf(pair.in.ts) > workStartTotalMin && ws3[inAddr]) {
-          ws3[inAddr].s = { font: { color: { rgb: 'E24B4A' } } };
+        if (pair?.in && ws3[inAddr]) {
+          ws3[inAddr].s = minutesOf(pair.in.ts) > workStartTotalMin ? warningCellStyle : onTimeCellStyle;
         }
-        if (pair?.out && minutesOf(pair.out.ts) < workEndTotalMin && ws3[outAddr]) {
-          ws3[outAddr].s = { font: { color: { rgb: 'E24B4A' } } };
-        }
-        if (pair?.out && minutesOf(pair.out.ts) >= workEndTotalMin && ws3[outAddr]) {
-          ws3[outAddr].s = {
-            fill: { fgColor: { rgb: 'DDF7C8' } },
-            font: { color: { rgb: '0F6E56' } },
-          };
+        if (pair?.out && ws3[outAddr]) {
+          ws3[outAddr].s = minutesOf(pair.out.ts) < workEndTotalMin ? warningCellStyle : onTimeCellStyle;
         }
       }
     });
