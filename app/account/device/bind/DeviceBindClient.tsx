@@ -66,6 +66,7 @@ export default function DeviceBindClient({
   async function requestCamera() {
     setErr(null);
     if (isInAppBrowser()) {
+      setCamera('ok');
       fileRef.current?.click();
       return;
     }
@@ -171,7 +172,7 @@ export default function DeviceBindClient({
           <>
             <PermissionRow icon="map-pin" title="ตำแหน่ง" status={gps} onClick={requestGps} />
             {nativeCamera ? (
-              <PermissionFileRow icon="camera" title="กล้อง" status={camera} onChange={onCameraFile} />
+              <PermissionFileRow icon="camera" title="กล้อง" status={camera} onChange={onCameraFile} onOpen={() => setCamera('ok')} />
             ) : (
               <PermissionRow icon="camera" title="กล้อง" status={camera} onClick={requestCamera} />
             )}
@@ -227,12 +228,12 @@ function PermissionRow({ icon, title, status, onClick }: { icon: string; title: 
   );
 }
 
-function PermissionFileRow({ icon, title, status, onChange }: { icon: string; title: string; status: PermissionState; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
+function PermissionFileRow({ icon, title, status, onChange, onOpen }: { icon: string; title: string; status: PermissionState; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; onOpen: () => void }) {
   const color = status === 'ok' ? LIME : status === 'error' ? '#ff9d9d' : '#c9c9cc';
   const text = status === 'ok' ? 'อนุญาตแล้ว' : status === 'error' ? 'ไม่สำเร็จ' : 'แตะเพื่ออนุญาต';
 
   return (
-    <label style={{ position: 'relative', background: '#1a1a1c', borderRadius: 14, padding: '12px 14px', color: '#fff', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', overflow: 'hidden' }}>
+    <label onPointerDown={onOpen} style={{ position: 'relative', background: '#1a1a1c', borderRadius: 14, padding: '12px 14px', color: '#fff', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', overflow: 'hidden' }}>
       <i className={`ti ti-${icon}`} style={{ fontSize: 22, color }} aria-hidden></i>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 14, fontWeight: 700 }}>{title}</div>

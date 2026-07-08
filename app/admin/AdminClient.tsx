@@ -4,8 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
-import { createClient } from '@/lib/supabase/client';
-import { approveDeviceRequest, rejectDeviceRequest, resetEmployeeAccess } from './actions';
+import { approveDeviceRequest, rejectDeviceRequest, resetAllStaffAccess, resetEmployeeAccess } from './actions';
 
 type Employee = { emp_id: string; name: string; role: string; active: boolean; branch: string | null; device_id: string | null };
 type Checkin = {
@@ -68,58 +67,20 @@ export default function AdminClient({
   const [dateFrom, setDateFrom] = useState<string>('');
   const [dateTo, setDateTo] = useState<string>('');
   const [search, setSearch] = useState('');
+  const [employeeSearch, setEmployeeSearch] = useState('');
   const [devReqs, setDevReqs] = useState(deviceRequests);
   const [isPending, startTransition] = useTransition();
   const [liveNotice, setLiveNotice] = useState<string | null>(null);
-  const [rtStatus, setRtStatus] = useState<'connecting' | 'live' | 'error'>('connecting');
   const router = useRouter();
 
   // sync state when server props change (after router.refresh())
   useEffect(() => { setDevReqs(deviceRequests); }, [deviceRequests]);
 
-  // Realtime — subscribe to new device requests + checkins
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel('admin-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'device_requests' }, (payload) => {
-        console.log('[realtime] device_requests', payload);
-        if (payload.eventType === 'INSERT') setLiveNotice('🔔 มีคำขอเปลี่ยนเครื่องใหม่');
-        else setLiveNotice('📝 คำขอเปลี่ยนเครื่องอัปเดต');
-        router.refresh();
-        setTimeout(() => setLiveNotice(null), 4000);
-      })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'checkins' }, (payload) => {
-        console.log('[realtime] checkin', payload);
-        setLiveNotice('🟢 มีการเช็คอิน/เอาท์ใหม่');
-        router.refresh();
-        setTimeout(() => setLiveNotice(null), 3000);
-      })
-      .subscribe((status) => {
-        console.log('[realtime] subscription status:', status);
-        if (status === 'SUBSCRIBED') setRtStatus('live');
-        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') setRtStatus('error');
-      });
-    return () => { supabase.removeChannel(channel); };
-  }, [router]);
-
-  // Polling fallback — refresh every 5s when tab visible (in case realtime drops events)
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | null = null;
-    const start = () => {
-      if (interval) return;
-      interval = setInterval(() => {
-        if (!document.hidden) router.refresh();
-      }, 5000);
-    };
-    const stop = () => {
-      if (interval) { clearInterval(interval); interval = null; }
-    };
-    const onVis = () => { if (document.hidden) stop(); else start(); };
-    document.addEventListener('visibilitychange', onVis);
-    start();
-    return () => { stop(); document.removeEventListener('visibilitychange', onVis); };
-  }, [router]);
+  function manualRefresh() {
+    setLiveNotice('กำลังรีเฟรชข้อมูล...');
+    router.refresh();
+    setTimeout(() => setLiveNotice(null), 2200);
+  }
 
   function handleApproveDevice(id: string) {
     startTransition(async () => {
@@ -146,6 +107,18 @@ export default function AdminClient({
     });
   }
 
+  function handleResetAllStaffAccess() {
+    const ok = window.confirm(
+      'รีเซ็ตพนักงานทุกคน?\n\nระบบจะรีเซ็ตเฉพาะบัญชี staff ที่ active: รหัสผ่านกลับเป็น 123456, บังคับเปลี่ยน PIN ใหม่, เคลียร์เครื่องที่ผูกไว้ และลบคำขอเปลี่ยนเครื่องค้างอยู่ โดยไม่ลบประวัติเช็คอิน',
+    );
+    if (!ok) return;
+    startTransition(async () => {
+      const res = await resetAllStaffAccess();
+      setLiveNotice(res.error ?? res.message ?? 'รีเซ็ตพนักงานทุกคนสำเร็จ');
+      if (!res.error) router.refresh();
+    });
+  }
+
   const workStartHr = parseInt(settings?.work_start?.slice(0, 2) ?? '8', 10);
   const workStartMin = parseInt(settings?.work_start?.slice(3, 5) ?? '20', 10);
   const workEndHr = parseInt(settings?.work_end?.slice(0, 2) ?? '16', 10);
@@ -161,6 +134,16 @@ export default function AdminClient({
     employees.forEach((e) => e.branch && set.add(e.branch));
     return Array.from(set);
   }, [branchNames, employees]);
+
+  const employeeRows = useMemo(() => {
+    const q = employeeSearch.trim().toLowerCase();
+    if (!q) return employees;
+    return employees.filter((e) =>
+      e.name.toLowerCase().includes(q) ||
+      e.emp_id.toLowerCase().includes(q) ||
+      (e.branch ?? '').toLowerCase().includes(q),
+    );
+  }, [employeeSearch, employees]);
 
   const stats = useMemo(() => {
     const ins = checkins.filter((c) => c.type === 'in');
@@ -512,12 +495,12 @@ export default function AdminClient({
             <span style={{
               display: 'inline-flex', alignItems: 'center', gap: 4,
               fontSize: 10, fontWeight: 600,
-              background: rtStatus === 'live' ? 'rgba(15,110,86,0.15)' : rtStatus === 'error' ? 'rgba(163,45,45,0.15)' : 'rgba(133,79,11,0.15)',
-              color: rtStatus === 'live' ? '#0f6e56' : rtStatus === 'error' ? '#a32d2d' : '#854f0b',
+              background: 'rgba(133,79,11,0.15)',
+              color: '#854f0b',
               padding: '2px 8px', borderRadius: 999,
             }}>
-              <span style={{ width: 6, height: 6, borderRadius: 999, background: rtStatus === 'live' ? '#1d9e75' : rtStatus === 'error' ? '#a32d2d' : '#ba7517' }} />
-              {rtStatus === 'live' ? 'LIVE' : rtStatus === 'error' ? 'OFFLINE' : 'CONNECTING'}
+              <span style={{ width: 6, height: 6, borderRadius: 999, background: '#ba7517' }} />
+              MANUAL
             </span>
           </div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>รายงานประจำเดือน {monthStr}</div>
@@ -526,6 +509,12 @@ export default function AdminClient({
           <Link href="/checkin" style={{ background: '#fff', color: C.dark, border: '0.5px solid rgba(0,0,0,0.1)', borderRadius: 10, padding: '7px 12px', fontSize: 12, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <i className="ti ti-home" style={{ fontSize: 13 }} aria-hidden></i>ไปหน้าเช็คอิน
           </Link>
+          <button onClick={manualRefresh} disabled={isPending} style={{ background: '#fff', color: C.dark, border: '0.5px solid rgba(0,0,0,0.1)', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.55 : 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <i className="ti ti-refresh" style={{ fontSize: 13 }} aria-hidden></i>รีเฟรชข้อมูล
+          </button>
+          <button onClick={handleResetAllStaffAccess} disabled={isPending} style={{ background: '#fff', color: '#a32d2d', border: '0.5px solid rgba(163,45,45,0.25)', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.55 : 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <i className="ti ti-refresh-alert" style={{ fontSize: 13 }} aria-hidden></i>รีเซ็ตพนักงานทุกคน
+          </button>
           <input type="month" defaultValue={monthStr} onChange={(e) => { window.location.href = `/admin?month=${e.target.value}`; }}
             style={{ background: '#fff', borderRadius: 10, padding: '6px 12px', border: '0.5px solid rgba(0,0,0,0.1)', fontSize: 12 }} />
           <button onClick={exportExcel} style={{ background: C.dark, color: C.lime, border: 'none', borderRadius: 10, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -719,11 +708,19 @@ export default function AdminClient({
       {/* Employee summary — white */}
       <div style={{ background: '#fff', borderRadius: 18, padding: 16, border: '0.5px solid rgba(0,0,0,0.08)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
-          <div style={{ fontSize: 14, fontWeight: 600 }}>สรุปพนักงาน {employees.length} คน</div>
-          <span style={{ fontSize: 11, color: '#5c5c60' }}>เพิ่ม/แก้ไขใน Supabase Studio → Table Editor</span>
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>สรุปพนักงาน {employees.length} คน</div>
+            <div style={{ fontSize: 11, color: '#5c5c60', marginTop: 2 }}>ข้อมูลหน้านี้จะอัปเดตเมื่อกดรีเฟรชเอง</div>
+          </div>
+          <input
+            value={employeeSearch}
+            onChange={(e) => setEmployeeSearch(e.target.value)}
+            placeholder="ค้นหาชื่อ/รหัส/สาขา..."
+            style={{ ...inputStyle, width: 220 }}
+          />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
-          {employees.map((e) => {
+          {employeeRows.map((e) => {
             const empIns = checkins.filter((c) => c.emp_id === e.emp_id && c.type === 'in');
             const empLate = empIns.filter((c) => { const d = new Date(c.ts); return d.getHours() * 60 + d.getMinutes() > cutoffMin; }).length;
             return (

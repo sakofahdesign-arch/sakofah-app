@@ -6,6 +6,12 @@ import { revalidatePath } from 'next/cache';
 
 const DEFAULT_RESET_PIN = '123456';
 
+function chunks<T>(items: T[], size = 10) {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
 async function requireAdmin() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -113,4 +119,58 @@ export async function resetEmployeeAccess(empId: string) {
 
   revalidatePath('/admin');
   return { ok: true, message: `รีเซ็ต ${employee.name} แล้ว รหัสเริ่มต้นคือ ${DEFAULT_RESET_PIN}` };
+}
+
+export async function resetAllStaffAccess() {
+  const supabase = await requireAdmin();
+  if (!supabase) return { error: 'ไม่มีสิทธิ์' };
+
+  const admin = createAdminClient();
+  if (!admin) return { error: 'ยังไม่ได้ตั้งค่า SUPABASE_SERVICE_ROLE_KEY สำหรับรีเซ็ตรหัสผ่าน' };
+
+  const { data: employees, error: empErr } = await admin
+    .from('employees')
+    .select('id, emp_id, name')
+    .eq('role', 'staff')
+    .eq('active', true)
+    .order('emp_id');
+  if (empErr) return { error: empErr.message };
+  if (!employees?.length) return { error: 'ไม่พบพนักงานสำหรับรีเซ็ต' };
+
+  let passwordFailed = 0;
+  for (const batch of chunks(employees, 10)) {
+    const results = await Promise.all(
+      batch.map((employee) =>
+        admin.auth.admin.updateUserById(employee.id, { password: DEFAULT_RESET_PIN }),
+      ),
+    );
+    passwordFailed += results.filter((result) => result.error).length;
+  }
+  if (passwordFailed > 0) return { error: `รีเซ็ตรหัสผ่านไม่สำเร็จ ${passwordFailed} คน` };
+
+  const empIds = employees.map((employee) => employee.emp_id);
+  const resetPayload = {
+    device_id: null,
+    device_bound_at: null,
+    pin_changed: false,
+  };
+
+  let { error: resetErr } = await admin
+    .from('employees')
+    .update(resetPayload)
+    .in('emp_id', empIds);
+
+  if (resetErr && /device_bound_at/i.test(resetErr.message)) {
+    const fallback = await admin
+      .from('employees')
+      .update({ device_id: null, pin_changed: false })
+      .in('emp_id', empIds);
+    resetErr = fallback.error;
+  }
+  if (resetErr) return { error: resetErr.message };
+
+  await admin.from('device_requests').delete().in('emp_id', empIds);
+
+  revalidatePath('/admin');
+  return { ok: true, message: `รีเซ็ตพนักงาน ${employees.length} คนแล้ว รหัสเริ่มต้นคือ ${DEFAULT_RESET_PIN}` };
 }

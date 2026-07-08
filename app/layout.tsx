@@ -5,11 +5,11 @@ export const metadata: Metadata = {
   title: "Sakofah Islamic — ระบบลงเวลาพนักงาน",
   description: "ระบบเช็คอิน/เช็คเอาท์พนักงาน Sakofah Islamic",
   manifest: "/manifest.json",
-  applicationName: "Sakofah",
+  applicationName: "HR Check",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Sakofah",
+    title: "HR Check",
   },
   icons: {
     icon: [

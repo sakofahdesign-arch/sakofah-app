@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "Sakofah HR Connect",
-  "short_name": "Sakofah",
+  "name": "HR Check",
+  "short_name": "HR Check",
   "description": "Sakofah staff check-in system",
   "start_url": "/",
   "scope": "/",
