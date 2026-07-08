@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js';
 import { revalidatePath } from 'next/cache';
 
+const DEFAULT_RESET_PIN = '123456';
+
 async function requireAdmin() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -83,7 +85,7 @@ export async function resetEmployeeAccess(empId: string) {
   if (empErr || !employee) return { error: empErr?.message ?? 'ไม่พบพนักงาน' };
 
   const { error: passwordErr } = await admin.auth.admin.updateUserById(employee.id, {
-    password: employee.emp_id,
+    password: DEFAULT_RESET_PIN,
   });
   if (passwordErr) return { error: passwordErr.message };
 
@@ -110,5 +112,5 @@ export async function resetEmployeeAccess(empId: string) {
   await admin.from('device_requests').delete().eq('emp_id', cleanEmpId);
 
   revalidatePath('/admin');
-  return { ok: true, message: `รีเซ็ต ${employee.name} แล้ว รหัสเริ่มต้นคือ ${employee.emp_id}` };
+  return { ok: true, message: `รีเซ็ต ${employee.name} แล้ว รหัสเริ่มต้นคือ ${DEFAULT_RESET_PIN}` };
 }

@@ -136,7 +136,7 @@ export default function AdminClient({
 
   function handleResetEmployeeAccess(empId: string, name: string) {
     const ok = window.confirm(
-      `รีเซ็ตการเข้าใช้งานของ ${name} (${empId})?\n\nระบบจะรีเซ็ตรหัสผ่านกลับเป็นรหัสพนักงาน, บังคับเปลี่ยน PIN ใหม่, เคลียร์เครื่องที่ผูกไว้ และลบคำขอเปลี่ยนเครื่องค้างอยู่ โดยไม่ลบประวัติเช็คอิน`,
+      `รีเซ็ตการเข้าใช้งานของ ${name} (${empId})?\n\nระบบจะรีเซ็ตรหัสผ่านกลับเป็น 123456, บังคับเปลี่ยน PIN ใหม่, เคลียร์เครื่องที่ผูกไว้ และลบคำขอเปลี่ยนเครื่องค้างอยู่ โดยไม่ลบประวัติเช็คอิน`,
     );
     if (!ok) return;
     startTransition(async () => {
