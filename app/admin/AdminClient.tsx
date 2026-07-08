@@ -512,9 +512,6 @@ export default function AdminClient({
           <button onClick={manualRefresh} disabled={isPending} style={{ background: '#fff', color: C.dark, border: '0.5px solid rgba(0,0,0,0.1)', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 600, cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.55 : 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <i className="ti ti-refresh" style={{ fontSize: 13 }} aria-hidden></i>รีเฟรชข้อมูล
           </button>
-          <button onClick={handleResetAllStaffAccess} disabled={isPending} style={{ background: '#fff', color: '#a32d2d', border: '0.5px solid rgba(163,45,45,0.25)', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.55 : 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <i className="ti ti-refresh-alert" style={{ fontSize: 13 }} aria-hidden></i>รีเซ็ตพนักงานทุกคน
-          </button>
           <input type="month" defaultValue={monthStr} onChange={(e) => { window.location.href = `/admin?month=${e.target.value}`; }}
             style={{ background: '#fff', borderRadius: 10, padding: '6px 12px', border: '0.5px solid rgba(0,0,0,0.1)', fontSize: 12 }} />
           <button onClick={exportExcel} style={{ background: C.dark, color: C.lime, border: 'none', borderRadius: 10, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -707,17 +704,20 @@ export default function AdminClient({
 
       {/* Employee summary — white */}
       <div style={{ background: '#fff', borderRadius: 18, padding: 16, border: '0.5px solid rgba(0,0,0,0.08)' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 6 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
           <div>
             <div style={{ fontSize: 14, fontWeight: 600 }}>สรุปพนักงาน {employees.length} คน</div>
             <div style={{ fontSize: 11, color: '#5c5c60', marginTop: 2 }}>ข้อมูลหน้านี้จะอัปเดตเมื่อกดรีเฟรชเอง</div>
+            <input
+              value={employeeSearch}
+              onChange={(e) => setEmployeeSearch(e.target.value)}
+              placeholder="ค้นหาชื่อ/รหัส/สาขา..."
+              style={{ ...inputStyle, width: 220, marginTop: 10 }}
+            />
           </div>
-          <input
-            value={employeeSearch}
-            onChange={(e) => setEmployeeSearch(e.target.value)}
-            placeholder="ค้นหาชื่อ/รหัส/สาขา..."
-            style={{ ...inputStyle, width: 220 }}
-          />
+          <button onClick={handleResetAllStaffAccess} disabled={isPending} style={{ background: '#fff', color: '#a32d2d', border: '0.5px solid rgba(163,45,45,0.25)', borderRadius: 10, padding: '7px 11px', fontSize: 12, fontWeight: 700, cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.55 : 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <i className="ti ti-refresh-alert" style={{ fontSize: 13 }} aria-hidden></i>Reset
+          </button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
           {employeeRows.map((e) => {
