@@ -8,15 +8,19 @@ import { clearDeviceId, getDeviceInfo, getOrCreateDeviceId } from '@/lib/device'
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [showPin, setShowPin] = useState(false);
+  const [externalLogin, setExternalLogin] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const url = new URL(window.location.href);
-    if (url.searchParams.get('clearDevice') !== '1') return;
-    clearDeviceId();
-    url.searchParams.delete('clearDevice');
+    if (url.searchParams.get('external') === '1') setExternalLogin(true);
+    if (url.searchParams.get('clearDevice') === '1') {
+      clearDeviceId();
+      url.searchParams.delete('clearDevice');
+    }
+    if (url.searchParams.has('external')) url.searchParams.delete('external');
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
   }, []);
 
@@ -66,6 +70,22 @@ export default function LoginPage() {
             กรอกรหัสพนักงานและ PIN ที่ได้รับจากฝ่ายบุคคล
           </div>
         </div>
+
+        {externalLogin && (
+          <div style={{
+            background: 'rgba(214,242,107,0.12)',
+            border: '0.5px solid rgba(214,242,107,0.35)',
+            color: '#d6f26b',
+            borderRadius: 12,
+            padding: 10,
+            fontSize: 12,
+            lineHeight: 1.45,
+            marginBottom: 12,
+          }}>
+            <i className="ti ti-shield-check" style={{ fontSize: 14, verticalAlign: -2, marginRight: 6 }} aria-hidden></i>
+            เคลียร์บัญชีเดิมในบราวเซอร์นี้แล้ว กรุณาเข้าสู่ระบบด้วยบัญชีที่ต้องการใช้งาน
+          </div>
+        )}
 
         <form action={handleSubmit}>
           <div style={{ marginBottom: 10 }}>

@@ -10,14 +10,16 @@ export async function submitOffsite(formData: FormData) {
 
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, active, device_id')
+    .select('emp_id, role, active, device_id')
     .eq('id', user.id)
     .single();
 
   if (!emp || !emp.active) return { error: 'ไม่พบข้อมูลพนักงาน' };
   const deviceId = (formData.get('deviceId') as string)?.trim();
-  if (!emp.device_id) return { error: 'DEVICE_NOT_BOUND' };
-  if (!deviceId || emp.device_id !== deviceId) return { error: 'DEVICE_MISMATCH' };
+  if (emp.role !== 'admin') {
+    if (!emp.device_id) return { error: 'DEVICE_NOT_BOUND' };
+    if (!deviceId || emp.device_id !== deviceId) return { error: 'DEVICE_MISMATCH' };
+  }
 
   // Auto-detect direction from today's checkins
   const today = new Date().toISOString().slice(0, 10);

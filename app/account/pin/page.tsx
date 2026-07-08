@@ -12,6 +12,7 @@ export default function ChangePinPage() {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [forced, setForced] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -27,23 +28,25 @@ export default function ChangePinPage() {
   }, []);
 
   function submit() {
+    if (submitting || pending || ok) return;
     setErr(null);
     if (newPin.length < 6) { setErr('PIN ใหม่ต้องมีอย่างน้อย 6 หลัก'); return; }
     if (newPin === '123456') { setErr('ห้ามใช้ PIN เริ่มต้น 123456 — โปรดตั้งรหัสใหม่'); return; }
     if (newPin === oldPin) { setErr('PIN ใหม่ต้องต่างจาก PIN เดิม'); return; }
     if (newPin !== confirmPin) { setErr('PIN ใหม่และยืนยันไม่ตรงกัน'); return; }
 
+    setSubmitting(true);
     startTransition(async () => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.email) { setErr('ไม่ได้เข้าสู่ระบบ'); return; }
+      if (!user?.email) { setErr('ไม่ได้เข้าสู่ระบบ'); setSubmitting(false); return; }
 
       // verify old pin
       const { error: signinErr } = await supabase.auth.signInWithPassword({ email: user.email, password: oldPin });
-      if (signinErr) { setErr('PIN เดิมไม่ถูกต้อง'); return; }
+      if (signinErr) { setErr('PIN เดิมไม่ถูกต้อง'); setSubmitting(false); return; }
 
       const { error } = await supabase.auth.updateUser({ password: newPin });
-      if (error) { setErr(error.message); return; }
+      if (error) { setErr(error.message); setSubmitting(false); return; }
 
       await supabase.rpc('mark_pin_changed');
 
@@ -51,6 +54,13 @@ export default function ChangePinPage() {
       setTimeout(() => router.replace(forced ? '/account/device/bind' : '/checkin'), 1200);
     });
   }
+
+  function cancel() {
+    if (submitting || pending) return;
+    router.replace(forced ? '/logout' : '/checkin');
+  }
+
+  const submitLocked = submitting || pending || ok;
 
   return (
     <main style={{ minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 18 }}>
@@ -93,8 +103,11 @@ export default function ChangePinPage() {
           </div>
         )}
 
-        <button onClick={submit} disabled={pending} style={{ background: '#d6f26b', color: '#0e0e10', border: 'none', borderRadius: 14, padding: 13, fontWeight: 700, fontSize: 14, cursor: 'pointer', marginTop: 4, opacity: pending ? 0.5 : 1 }}>
-          {pending ? 'กำลังบันทึก...' : forced ? 'ตั้ง PIN แล้วไปต่อ' : 'ยืนยันเปลี่ยน PIN'}
+        <button onClick={submit} disabled={submitLocked} style={{ background: '#d6f26b', color: '#0e0e10', border: 'none', borderRadius: 14, padding: 13, fontWeight: 700, fontSize: 14, cursor: submitLocked ? 'not-allowed' : 'pointer', marginTop: 4, opacity: submitLocked ? 0.45 : 1 }}>
+          {submitLocked ? 'กำลังบันทึก...' : forced ? 'ตั้ง PIN แล้วไปต่อ' : 'ยืนยันเปลี่ยน PIN'}
+        </button>
+        <button onClick={cancel} disabled={submitLocked} style={{ background: 'transparent', color: '#c9c9cc', border: '1px solid #2a2a2d', borderRadius: 14, padding: 12, fontWeight: 700, fontSize: 13, cursor: submitLocked ? 'not-allowed' : 'pointer', opacity: submitLocked ? 0.45 : 1 }}>
+          ยกเลิก
         </button>
       </div>
     </main>

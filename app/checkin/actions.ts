@@ -29,14 +29,16 @@ export async function submitCheckin(input: CheckinInput) {
 
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, active, branch, device_id')
+    .select('emp_id, role, active, branch, device_id')
     .eq('id', user.id)
     .single();
 
   if (!emp) return { error: 'ไม่พบข้อมูลพนักงาน' };
   if (!emp.active) return { error: 'บัญชีถูกระงับ' };
-  if (!emp.device_id) return { error: 'DEVICE_NOT_BOUND' };
-  if (!input.deviceId || emp.device_id !== input.deviceId) return { error: 'DEVICE_MISMATCH' };
+  if (emp.role !== 'admin') {
+    if (!emp.device_id) return { error: 'DEVICE_NOT_BOUND' };
+    if (!input.deviceId || emp.device_id !== input.deviceId) return { error: 'DEVICE_MISMATCH' };
+  }
 
   // GPS check — ใช้พิกัดของสาขาที่พนักงานสังกัด (fallback เป็น settings global)
   let officeLat: number | null = null;
@@ -104,7 +106,7 @@ export async function submitCheckin(input: CheckinInput) {
     type: input.type,
     lat: input.lat,
     lng: input.lng,
-    device_id: input.deviceId,
+    device_id: emp.role === 'admin' ? (input.deviceId || null) : input.deviceId,
     wifi_ssid: input.wifi_ssid ?? null,
     status: 'approved',
   });

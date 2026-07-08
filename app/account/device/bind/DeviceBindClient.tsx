@@ -32,6 +32,7 @@ export default function DeviceBindClient({
   const [gps, setGps] = useState<PermissionState>('idle');
   const [camera, setCamera] = useState<PermissionState>('idle');
   const [err, setErr] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -92,6 +93,7 @@ export default function DeviceBindClient({
   }
 
   function confirmBind() {
+    if (submitting || pending) return;
     setErr(null);
     if (gps !== 'ok') {
       setErr('กรุณาอนุญาตตำแหน่งก่อน');
@@ -101,6 +103,7 @@ export default function DeviceBindClient({
       setErr('กรุณาอนุญาตกล้องก่อน');
       return;
     }
+    setSubmitting(true);
     startTransition(async () => {
       const res = await bindDevice(deviceId);
       if (res.status === 'ok') {
@@ -114,11 +117,18 @@ export default function DeviceBindClient({
       } else {
         setErr(res.message ?? 'ผูกเครื่องไม่สำเร็จ');
       }
+      setSubmitting(false);
     });
   }
 
   const mismatch = Boolean(boundDeviceId && deviceId && boundDeviceId !== deviceId);
   const nativeCamera = typeof navigator !== 'undefined' && (isInAppBrowser() || !navigator.mediaDevices?.getUserMedia);
+  const submitLocked = submitting || pending;
+
+  function cancel() {
+    if (submitLocked) return;
+    router.replace('/logout');
+  }
 
   return (
     <main style={{ minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 18, display: 'flex', flexDirection: 'column' }}>
@@ -128,7 +138,6 @@ export default function DeviceBindClient({
       </div>
 
       <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 11, color: '#5c5c60' }}>{empName} · {empId}</div>
         <div style={{ fontSize: 22, fontWeight: 800 }}>ยืนยันเครื่องนี้</div>
         <div style={{ fontSize: 12, color: '#5c5c60', lineHeight: 1.5, marginTop: 4 }}>
           ระบบจะให้ลงเวลาได้เฉพาะเครื่องที่ผูกไว้ เพื่อป้องกันการลงเวลาแทนกัน
@@ -136,6 +145,15 @@ export default function DeviceBindClient({
       </div>
 
       <div style={{ background: DARK, borderRadius: 18, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ background: '#1a1a1c', borderRadius: 14, padding: '12px 14px' }}>
+          <div style={{ fontSize: 11, color: '#8e8e92', marginBottom: 4 }}>ผู้ใช้งาน</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: '#fff' }}>
+            <i className="ti ti-user-check" style={{ color: LIME, marginRight: 6 }} aria-hidden></i>
+            {empName}
+          </div>
+          <div style={{ fontSize: 11, color: '#c9c9cc', marginTop: 5 }}>รหัสพนักงาน {empId}</div>
+        </div>
+
         <div style={{ background: '#1a1a1c', borderRadius: 14, padding: '12px 14px' }}>
           <div style={{ fontSize: 11, color: '#8e8e92', marginBottom: 4 }}>เครื่องที่กำลังใช้</div>
           <div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>
@@ -176,10 +194,17 @@ export default function DeviceBindClient({
 
         <button
           onClick={confirmBind}
-          disabled={pending || mismatch || !deviceId}
-          style={{ background: LIME, color: DARK, border: 'none', borderRadius: 14, padding: 14, fontWeight: 800, fontSize: 14, cursor: 'pointer', opacity: (pending || mismatch || !deviceId) ? 0.5 : 1 }}
+          disabled={submitLocked || mismatch || !deviceId}
+          style={{ background: LIME, color: DARK, border: 'none', borderRadius: 14, padding: 14, fontWeight: 800, fontSize: 14, cursor: (submitLocked || mismatch || !deviceId) ? 'not-allowed' : 'pointer', opacity: (submitLocked || mismatch || !deviceId) ? 0.45 : 1 }}
         >
-          {pending ? 'กำลังผูกเครื่อง...' : 'ยืนยันผูกเครื่องนี้'}
+          {submitLocked ? 'กำลังผูกเครื่อง...' : 'ยืนยันผูกเครื่องนี้'}
+        </button>
+        <button
+          onClick={cancel}
+          disabled={submitLocked}
+          style={{ background: 'transparent', color: '#c9c9cc', border: '1px solid #2a2a2d', borderRadius: 14, padding: 12, fontWeight: 700, fontSize: 13, cursor: submitLocked ? 'not-allowed' : 'pointer', opacity: submitLocked ? 0.45 : 1 }}
+        >
+          ยกเลิก
         </button>
       </div>
     </main>
