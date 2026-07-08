@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { createClient } from '@/lib/supabase/client';
-import { approveDeviceRequest, rejectDeviceRequest } from './actions';
+import { approveDeviceRequest, rejectDeviceRequest, resetEmployeeAccess } from './actions';
 
 type Employee = { emp_id: string; name: string; role: string; active: boolean; branch: string | null; device_id: string | null };
 type Checkin = {
@@ -131,6 +131,18 @@ export default function AdminClient({
     startTransition(async () => {
       const res = await rejectDeviceRequest(id);
       if (!res.error) setDevReqs((list) => list.filter((r) => r.id !== id));
+    });
+  }
+
+  function handleResetEmployeeAccess(empId: string, name: string) {
+    const ok = window.confirm(
+      `รีเซ็ตการเข้าใช้งานของ ${name} (${empId})?\n\nระบบจะรีเซ็ตรหัสผ่านกลับเป็นรหัสพนักงาน, บังคับเปลี่ยน PIN ใหม่, เคลียร์เครื่องที่ผูกไว้ และลบคำขอเปลี่ยนเครื่องค้างอยู่ โดยไม่ลบประวัติเช็คอิน`,
+    );
+    if (!ok) return;
+    startTransition(async () => {
+      const res = await resetEmployeeAccess(empId);
+      setLiveNotice(res.error ?? res.message ?? 'รีเซ็ตสำเร็จ');
+      if (!res.error) router.refresh();
     });
   }
 
@@ -715,7 +727,7 @@ export default function AdminClient({
             const empIns = checkins.filter((c) => c.emp_id === e.emp_id && c.type === 'in');
             const empLate = empIns.filter((c) => { const d = new Date(c.ts); return d.getHours() * 60 + d.getMinutes() > cutoffMin; }).length;
             return (
-              <div key={e.emp_id} style={{ background: '#f4f2ec', borderRadius: 12, padding: '10px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div key={e.emp_id} style={{ background: '#f4f2ec', borderRadius: 12, padding: '10px 12px', display: 'grid', gridTemplateColumns: '36px 1fr auto', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: e.role === 'admin' ? C.dark : C.lime, color: e.role === 'admin' ? C.lime : C.dark, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>
                   {e.name.slice(0, 2)}
                 </div>
@@ -726,6 +738,21 @@ export default function AdminClient({
                     {empLate > 0 && <span style={{ color: '#a32d2d' }}> · สาย {empLate}</span>}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => handleResetEmployeeAccess(e.emp_id, e.name)}
+                  disabled={isPending}
+                  title="รีเซ็ตรหัสผ่านและผูกเครื่องใหม่"
+                  style={{
+                    width: 34, height: 34, borderRadius: 10,
+                    border: '0.5px solid rgba(163,45,45,0.25)',
+                    background: '#fff', color: '#a32d2d',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.5 : 1,
+                  }}
+                >
+                  <i className="ti ti-refresh-alert" style={{ fontSize: 17 }} aria-hidden></i>
+                </button>
               </div>
             );
           })}

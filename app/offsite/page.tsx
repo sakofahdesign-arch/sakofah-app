@@ -39,6 +39,19 @@ function OffsiteInner() {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
+  function getBangkokDayRange(date = new Date()) {
+    const ymd = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Bangkok',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+    return {
+      start: new Date(`${ymd}T00:00:00.000+07:00`).toISOString(),
+      end: new Date(`${ymd}T23:59:59.999+07:00`).toISOString(),
+    };
+  }
+
   // Auto-detect direction from today's checkins
   useEffect(() => {
     (async () => {
@@ -47,11 +60,11 @@ function OffsiteInner() {
       if (!user) return;
       const { data: emp } = await supabase.from('employees').select('emp_id').eq('id', user.id).single();
       if (!emp) return;
-      const today = new Date().toISOString().slice(0, 10);
+      const today = getBangkokDayRange();
       const { data: rows } = await supabase.from('checkins').select('type')
         .eq('emp_id', emp.emp_id)
-        .gte('ts', `${today}T00:00:00`)
-        .lte('ts', `${today}T23:59:59`);
+        .gte('ts', today.start)
+        .lte('ts', today.end);
       const types = (rows ?? []).map((r) => r.type);
       const hasIn = types.includes('in') || types.includes('offsite_in');
       setDirection(hasIn ? 'out' : 'in');
@@ -248,7 +261,7 @@ function OffsiteInner() {
             {nativeCapture && (
               <input
                 type="file"
-                accept="image/*"
+                accept="image/*;capture=camera"
                 capture="environment"
                 onChange={handleFile}
                 aria-label="เปิดกล้อง"
@@ -267,7 +280,7 @@ function OffsiteInner() {
         <input
           ref={fileRef}
           type="file"
-          accept="image/*"
+          accept="image/*;capture=camera"
           capture="environment"
           onChange={handleFile}
           style={{ position: 'fixed', left: -9999, top: -9999, width: 1, height: 1, opacity: 0.01 }}
