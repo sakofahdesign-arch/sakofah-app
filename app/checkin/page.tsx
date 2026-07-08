@@ -2,6 +2,19 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 import CheckinClient from './CheckinClient';
 
+function getBangkokDayRange(date = new Date()) {
+  const ymd = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+  return {
+    start: new Date(`${ymd}T00:00:00.000+07:00`).toISOString(),
+    end: new Date(`${ymd}T23:59:59.999+07:00`).toISOString(),
+  };
+}
+
 export default async function CheckinPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -30,13 +43,13 @@ export default async function CheckinPage() {
     );
   }
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBangkokDayRange();
   const { data: todayCheckins } = await supabase
     .from('checkins')
     .select('type, ts')
     .eq('emp_id', emp.emp_id)
-    .gte('ts', `${today}T00:00:00`)
-    .lte('ts', `${today}T23:59:59`)
+    .gte('ts', today.start)
+    .lte('ts', today.end)
     .order('ts');
 
   const { data: settings } = await supabase

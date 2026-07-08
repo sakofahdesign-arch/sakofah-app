@@ -38,9 +38,29 @@ function timeToMin(t: string): number {
   return h * 60 + m;
 }
 
+const BANGKOK_TIME_ZONE = 'Asia/Bangkok';
+const bangkokTimeFormatter = new Intl.DateTimeFormat('th-TH', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: BANGKOK_TIME_ZONE,
+});
+const bangkokTimePartsFormatter = new Intl.DateTimeFormat('en-GB', {
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+  timeZone: BANGKOK_TIME_ZONE,
+});
+
+function formatBangkokTime(ts: string | Date): string {
+  return bangkokTimeFormatter.format(new Date(ts));
+}
+
 function tsToMin(ts: string): number {
-  const d = new Date(ts);
-  return d.getHours() * 60 + d.getMinutes();
+  const parts = bangkokTimePartsFormatter.formatToParts(new Date(ts));
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+  return hour * 60 + minute;
 }
 
 function lateMin(ts: string, workStart: string): number {
@@ -155,7 +175,7 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
         const ws = settings?.work_start ?? '08:20';
         const we = settings?.work_end ?? '16:30';
         const t = now ?? new Date();
-        const nowMin = t.getHours() * 60 + t.getMinutes();
+        const nowMin = tsToMin(t.toISOString());
         let extra = '';
         if (type === 'in') {
           const late = Math.max(0, nowMin - timeToMin(ws));
@@ -169,8 +189,8 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
     });
   }
 
-  const timeStr = now ? now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '--:--';
-  const dateStr = now ? now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const timeStr = now ? formatBangkokTime(now) : '--:--';
+  const dateStr = now ? now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', timeZone: BANGKOK_TIME_ZONE }) : '';
   const workDays = settings?.work_days === 'MTWTF' ? 'จ–ศ' : 'ทุกวัน';
 
   // GPS chip styling — black bg with lime border (in range) or red border (out of range)
@@ -270,7 +290,7 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
         ) : !hasCheckedOut ? (
           <RoundHoldButton
             color="#ff9d9d" textColor="#501313" arrow="down" label="เช็คเอาท์"
-            sub={pending ? 'กำลังบันทึก...' : `เข้างานเมื่อ ${todayCheckins.find((c) => c.type === 'in' || c.type === 'offsite_in')?.ts.slice(11, 16)}`}
+            sub={pending ? 'กำลังบันทึก...' : `เข้างานเมื่อ ${formatBangkokTime(todayCheckins.find((c) => c.type === 'in' || c.type === 'offsite_in')?.ts ?? new Date())}`}
             progress={holdProgress} sparkle={sparkle} disabled={pending || !coords}
             onStart={() => startHold('out')} onCancel={cancelHold}
           />
@@ -331,7 +351,7 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
                     <i className={isIn ? 'ti ti-login-2' : 'ti ti-logout-2'} style={{ fontSize: 16, color: iconColor }} aria-hidden></i>
                     {label}
                   </span>
-                  <span style={{ fontWeight: 600, color: '#d6f26b' }}>{new Date(c.ts).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}</span>
+                  <span style={{ fontWeight: 600, color: '#d6f26b' }}>{formatBangkokTime(c.ts)}</span>
                 </div>
                 {(late > 0 || early > 0) && (
                   <div style={{ marginTop: 4, marginLeft: 24, fontSize: 11, color: late > 0 ? '#ff9d9d' : '#fcdfb1' }}>
