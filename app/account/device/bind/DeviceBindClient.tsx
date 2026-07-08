@@ -118,6 +118,7 @@ export default function DeviceBindClient({
   }
 
   const mismatch = Boolean(boundDeviceId && deviceId && boundDeviceId !== deviceId);
+  const nativeCamera = typeof navigator !== 'undefined' && (isInAppBrowser() || !navigator.mediaDevices?.getUserMedia);
 
   return (
     <main style={{ minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 18, display: 'flex', flexDirection: 'column' }}>
@@ -151,14 +152,18 @@ export default function DeviceBindClient({
         ) : (
           <>
             <PermissionRow icon="map-pin" title="ตำแหน่ง" status={gps} onClick={requestGps} />
-            <PermissionRow icon="camera" title="กล้อง" status={camera} onClick={requestCamera} />
+            {nativeCamera ? (
+              <PermissionFileRow icon="camera" title="กล้อง" status={camera} onChange={onCameraFile} />
+            ) : (
+              <PermissionRow icon="camera" title="กล้อง" status={camera} onClick={requestCamera} />
+            )}
             <input
               ref={fileRef}
               type="file"
               accept="image/*"
               capture="environment"
               onChange={onCameraFile}
-              style={{ position: 'fixed', left: -9999, top: -9999, width: 1, height: 1, opacity: 0 }}
+              style={{ position: 'fixed', left: -9999, top: -9999, width: 1, height: 1, opacity: 0.01 }}
             />
           </>
         )}
@@ -194,5 +199,29 @@ function PermissionRow({ icon, title, status, onClick }: { icon: string; title: 
       </div>
       <i className={`ti ti-${status === 'ok' ? 'circle-check-filled' : 'chevron-right'}`} style={{ fontSize: 18, color }} aria-hidden></i>
     </button>
+  );
+}
+
+function PermissionFileRow({ icon, title, status, onChange }: { icon: string; title: string; status: PermissionState; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
+  const color = status === 'ok' ? LIME : status === 'error' ? '#ff9d9d' : '#c9c9cc';
+  const text = status === 'ok' ? 'อนุญาตแล้ว' : status === 'error' ? 'ไม่สำเร็จ' : 'แตะเพื่ออนุญาต';
+
+  return (
+    <label style={{ position: 'relative', background: '#1a1a1c', borderRadius: 14, padding: '12px 14px', color: '#fff', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', overflow: 'hidden' }}>
+      <i className={`ti ti-${icon}`} style={{ fontSize: 22, color }} aria-hidden></i>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 14, fontWeight: 700 }}>{title}</div>
+        <div style={{ fontSize: 11, color }}>{text}</div>
+      </div>
+      <i className={`ti ti-${status === 'ok' ? 'circle-check-filled' : 'chevron-right'}`} style={{ fontSize: 18, color }} aria-hidden></i>
+      <input
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={onChange}
+        aria-label={title}
+        style={{ position: 'absolute', inset: 0, opacity: 0.01, cursor: 'pointer' }}
+      />
+    </label>
   );
 }

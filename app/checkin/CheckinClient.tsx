@@ -16,6 +16,12 @@ type Props = {
     allowed_ssid: string; work_start: string; work_end: string;
     late_tolerance_min?: number; work_days?: string;
   } | null;
+  checkinLocation: {
+    label: string;
+    lat: number;
+    lng: number;
+    radius_m: number;
+  } | null;
 };
 
 function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -47,7 +53,7 @@ function earlyMin(ts: string, workEnd: string): number {
 
 const HOLD_DURATION = 1000; // 1 วินาที
 
-export default function CheckinClient({ empName, empId, role, todayCheckins, settings }: Props) {
+export default function CheckinClient({ empName, empId, role, todayCheckins, settings, checkinLocation }: Props) {
   const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -79,8 +85,8 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
     return () => navigator.geolocation.clearWatch(watch);
   }, []);
 
-  const distance = coords && settings ? distanceMeters(coords.lat, coords.lng, settings.office_lat, settings.office_lng) : null;
-  const inRange = distance !== null && settings ? distance <= settings.radius_m : false;
+  const distance = coords && checkinLocation ? distanceMeters(coords.lat, coords.lng, checkinLocation.lat, checkinLocation.lng) : null;
+  const inRange = distance !== null && checkinLocation ? distance <= checkinLocation.radius_m : false;
 
   const types = todayCheckins.map((c) => c.type);
   const hasCheckedIn = types.includes('in') || types.includes('offsite_in');

@@ -1,16 +1,19 @@
 {
-  "name": "Sakofah Islamic — ระบบลงเวลาพนักงาน",
+  "id": "/",
+  "name": "Sakofah HR Connect",
   "short_name": "Sakofah",
-  "description": "ระบบเช็คอิน/เช็คเอาท์พนักงาน Sakofah Islamic",
+  "description": "Sakofah staff check-in system",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#d6f26b",
+  "background_color": "#2b303c",
   "theme_color": "#0e0e10",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
-    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "categories": ["productivity", "business"],
   "lang": "th"

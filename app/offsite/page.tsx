@@ -252,7 +252,7 @@ function OffsiteInner() {
                 capture="environment"
                 onChange={handleFile}
                 aria-label="เปิดกล้อง"
-                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer' }}
+                style={{ position: 'absolute', inset: 0, opacity: 0.01, cursor: 'pointer' }}
               />
             )}
           </>
@@ -270,7 +270,7 @@ function OffsiteInner() {
           accept="image/*"
           capture="environment"
           onChange={handleFile}
-          style={{ display: 'none' }}
+          style={{ position: 'fixed', left: -9999, top: -9999, width: 1, height: 1, opacity: 0.01 }}
         />
 
         {stream && (

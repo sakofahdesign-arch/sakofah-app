@@ -9,7 +9,7 @@ export default async function CheckinPage() {
 
   const { data: emp } = await supabase
     .from('employees')
-    .select('emp_id, name, role, pin_changed, device_id')
+    .select('emp_id, name, role, pin_changed, device_id, branch')
     .eq('id', user.id)
     .single();
 
@@ -44,6 +44,32 @@ export default async function CheckinPage() {
     .select('*')
     .single();
 
+  let checkinLocation = settings
+    ? {
+        label: 'office',
+        lat: settings.office_lat,
+        lng: settings.office_lng,
+        radius_m: settings.radius_m,
+      }
+    : null;
+
+  if (emp.branch) {
+    const { data: branch } = await supabase
+      .from('branches')
+      .select('name, lat, lng, radius_m')
+      .eq('name', emp.branch)
+      .maybeSingle();
+
+    if (branch) {
+      checkinLocation = {
+        label: branch.name,
+        lat: branch.lat,
+        lng: branch.lng,
+        radius_m: branch.radius_m,
+      };
+    }
+  }
+
   return (
     <CheckinClient
       empName={emp.name}
@@ -51,6 +77,7 @@ export default async function CheckinPage() {
       role={emp.role}
       todayCheckins={todayCheckins ?? []}
       settings={settings}
+      checkinLocation={checkinLocation}
     />
   );
 }

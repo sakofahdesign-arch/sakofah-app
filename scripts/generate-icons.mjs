@@ -24,6 +24,29 @@ for (const t of targets) {
 }
 
 // favicon.ico — ฝัง PNG หลายขนาดในคอนเทนเนอร์ ICO (รองรับ PNG-in-ICO)
+// Maskable icons need safe padding so Android launchers do not crop the logo.
+const maskableTargets = [
+  { size: 192, file: 'icon-maskable-192.png' },
+  { size: 512, file: 'icon-maskable-512.png' },
+];
+
+for (const t of maskableTargets) {
+  const inner = Math.round(t.size * 0.8);
+  const logo = await sharp(SRC).resize(inner, inner).png().toBuffer();
+  await sharp({
+    create: {
+      width: t.size,
+      height: t.size,
+      channels: 3,
+      background: '#2b303c',
+    },
+  })
+    .composite([{ input: logo, gravity: 'center' }])
+    .png()
+    .toFile(resolve(PUBLIC, t.file));
+  console.log(`ok ${t.file} (${t.size}x${t.size}, maskable)`);
+}
+
 const icoSizes = [16, 32, 48];
 const pngs = [];
 for (const s of icoSizes) {
