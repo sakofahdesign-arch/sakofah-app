@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
-import { approveDeviceRequest, rejectDeviceRequest, resetAllStaffAccess, resetEmployeeAccess } from './actions';
+import { approveDeviceRequest, cleanupMonthlyCheckins, rejectDeviceRequest, resetAllStaffAccess, resetEmployeeAccess } from './actions';
 
 type Employee = { emp_id: string; name: string; role: string; active: boolean; branch: string | null; device_id: string | null };
 type Checkin = {
@@ -115,6 +115,21 @@ export default function AdminClient({
     startTransition(async () => {
       const res = await resetAllStaffAccess();
       setLiveNotice(res.error ?? res.message ?? 'รีเซ็ตพนักงานทุกคนสำเร็จ');
+      if (!res.error) router.refresh();
+    });
+  }
+
+  function handleCleanupMonth() {
+    const typed = window.prompt(
+      `ลบข้อมูลเช็คอินและรูปของเดือน ${monthStr}?\n\nการลบนี้จะลบเฉพาะ checkins และรูปใน checkin-photos ของเดือนนี้ ไม่ลบพนักงาน/PIN/เครื่องที่ผูกไว้\n\nพิมพ์ ${monthStr} เพื่อยืนยัน`,
+    );
+    if (typed !== monthStr) {
+      if (typed !== null) setLiveNotice('ยกเลิก: พิมพ์เดือนไม่ตรง');
+      return;
+    }
+    startTransition(async () => {
+      const res = await cleanupMonthlyCheckins(monthStr);
+      setLiveNotice(res.error ?? res.message ?? 'ลบข้อมูลสิ้นเดือนสำเร็จ');
       if (!res.error) router.refresh();
     });
   }
@@ -518,6 +533,9 @@ export default function AdminClient({
           </button>
           <input type="month" defaultValue={monthStr} onChange={(e) => { window.location.href = `/admin?month=${e.target.value}`; }}
             style={{ background: '#fff', borderRadius: 10, padding: '6px 12px', border: '0.5px solid rgba(0,0,0,0.1)', fontSize: 12 }} />
+          <button onClick={handleCleanupMonth} disabled={isPending} style={{ background: '#fff', color: '#a32d2d', border: '0.5px solid rgba(163,45,45,0.25)', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.55 : 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+            <i className="ti ti-trash" style={{ fontSize: 13 }} aria-hidden></i>ลบข้อมูลเดือนนี้
+          </button>
           <button onClick={exportExcel} style={{ background: C.dark, color: C.lime, border: 'none', borderRadius: 10, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <i className="ti ti-file-spreadsheet" style={{ fontSize: 14 }} aria-hidden></i>Export Excel
           </button>

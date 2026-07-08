@@ -5,11 +5,32 @@ import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js
 import { revalidatePath } from 'next/cache';
 
 const DEFAULT_RESET_PIN = '123456';
+const CHECKIN_PHOTO_BUCKET = 'checkin-photos';
 
 function chunks<T>(items: T[], size = 10) {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
+}
+
+function monthRange(monthStr: string) {
+  const match = monthStr.match(/^(\d{4})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  if (!year || month < 1 || month > 12) return null;
+  return {
+    start: new Date(year, month - 1, 1).toISOString(),
+    end: new Date(year, month, 1).toISOString(),
+  };
+}
+
+function photoPathFromPublicUrl(url: string | null) {
+  if (!url) return null;
+  const marker = `/${CHECKIN_PHOTO_BUCKET}/`;
+  const idx = url.indexOf(marker);
+  if (idx < 0) return null;
+  return decodeURIComponent(url.slice(idx + marker.length).split('?')[0]);
 }
 
 async function requireAdmin() {
@@ -173,4 +194,47 @@ export async function resetAllStaffAccess() {
 
   revalidatePath('/admin');
   return { ok: true, message: `รีเซ็ตพนักงาน ${employees.length} คนแล้ว รหัสเริ่มต้นคือ ${DEFAULT_RESET_PIN}` };
+}
+
+export async function cleanupMonthlyCheckins(monthStr: string) {
+  const supabase = await requireAdmin();
+  if (!supabase) return { error: 'ไม่มีสิทธิ์' };
+
+  const admin = createAdminClient();
+  if (!admin) return { error: 'ยังไม่ได้ตั้งค่า SUPABASE_SERVICE_ROLE_KEY สำหรับลบข้อมูลสิ้นเดือน' };
+
+  const range = monthRange(monthStr);
+  if (!range) return { error: 'รูปแบบเดือนต้องเป็น YYYY-MM' };
+
+  const { data: rows, error: selectErr } = await admin
+    .from('checkins')
+    .select('id, photo_url')
+    .gte('ts', range.start)
+    .lt('ts', range.end);
+  if (selectErr) return { error: selectErr.message };
+
+  const checkins = rows ?? [];
+  const photoPaths = Array.from(
+    new Set(checkins.map((row) => photoPathFromPublicUrl(row.photo_url)).filter((path): path is string => Boolean(path))),
+  );
+
+  let photosDeleted = 0;
+  for (const batch of chunks(photoPaths, 100)) {
+    const { data, error } = await admin.storage.from(CHECKIN_PHOTO_BUCKET).remove(batch);
+    if (error) return { error: `ลบรูปไม่สำเร็จ: ${error.message}` };
+    photosDeleted += data?.length ?? batch.length;
+  }
+
+  const { error: deleteErr } = await admin
+    .from('checkins')
+    .delete()
+    .gte('ts', range.start)
+    .lt('ts', range.end);
+  if (deleteErr) return { error: deleteErr.message };
+
+  revalidatePath('/admin');
+  return {
+    ok: true,
+    message: `ลบข้อมูล ${monthStr} แล้ว: checkins ${checkins.length} รายการ, รูป ${photosDeleted} ไฟล์`,
+  };
 }
