@@ -1,21 +1,29 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState, useTransition } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { login } from './actions';
 import { clearDeviceId, getDeviceInfo, getOrCreateDeviceId } from '@/lib/device';
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}
+
+function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [showPin, setShowPin] = useState(false);
-  const [externalLogin, setExternalLogin] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const externalLogin = searchParams.get('external') === '1';
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const url = new URL(window.location.href);
-    if (url.searchParams.get('external') === '1') setExternalLogin(true);
     if (url.searchParams.get('clearDevice') === '1') {
       clearDeviceId();
       url.searchParams.delete('clearDevice');
@@ -36,7 +44,12 @@ export default function LoginPage() {
         router.push('/account/device');
         return;
       }
-      if (result?.error) setError(result.error);
+      if (result?.error) {
+        setError(result.error);
+        if (result.invalidCredentials) {
+          window.alert(result.error);
+        }
+      }
     });
   }
 

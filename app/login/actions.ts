@@ -25,7 +25,10 @@ export async function login(formData: FormData) {
   });
 
   if (error) {
-    return { error: 'รหัสพนักงานหรือ PIN ไม่ถูกต้อง' };
+    return {
+      error: 'รหัสพนักงานหรือ PIN ไม่ถูกต้อง',
+      invalidCredentials: true,
+    };
   }
 
   const { data: emp } = await supabase
