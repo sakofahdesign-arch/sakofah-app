@@ -33,13 +33,19 @@ create table if not exists checkins (
 
 create index if not exists idx_checkins_emp_id_ts on checkins(emp_id, ts desc);
 create index if not exists idx_checkins_status on checkins(status);
+create unique index if not exists checkins_one_in_per_emp_bangkok_day
+  on checkins (emp_id, ((ts at time zone 'Asia/Bangkok')::date))
+  where type in ('in', 'offsite_in');
+create unique index if not exists checkins_one_out_per_emp_bangkok_day
+  on checkins (emp_id, ((ts at time zone 'Asia/Bangkok')::date))
+  where type in ('out', 'offsite_out');
 
 -- 3. SETTINGS TABLE
 create table if not exists settings (
   id int primary key default 1,
-  office_lat double precision not null default 6.7184,
-  office_lng double precision not null default 101.5482,
-  radius_m int not null default 80,
+  office_lat double precision not null default 7.803235,
+  office_lng double precision not null default 99.085919,
+  radius_m int not null default 20,
   allowed_ssid text not null default 'SAKOFAH-OFFICE',
   work_start time not null default '07:30',
   work_end time not null default '16:30',

@@ -11,6 +11,12 @@ type CheckinInput = {
   wifi_ssid?: string;
 };
 
+function duplicateCheckinMessage(type: CheckinInput['type']) {
+  return type === 'in'
+    ? 'วันนี้คุณเช็คอินไปแล้ว'
+    : 'วันนี้คุณเช็คเอาท์ไปแล้ว';
+}
+
 function distanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
   const R = 6371000;
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -124,7 +130,10 @@ export async function submitCheckin(input: CheckinInput) {
     status: 'approved',
   });
 
-  if (error) return { error: error.message };
+  if (error) {
+    if (error.code === '23505') return { error: duplicateCheckinMessage(input.type) };
+    return { error: error.message };
+  }
 
   revalidatePath('/checkin');
   return { ok: true };

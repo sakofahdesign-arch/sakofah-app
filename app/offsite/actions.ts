@@ -3,6 +3,27 @@
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 
+type OffsiteType = 'offsite_in' | 'offsite_out';
+
+function getBangkokDayRange(date = new Date()) {
+  const ymd = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+  return {
+    start: new Date(`${ymd}T00:00:00.000+07:00`).toISOString(),
+    end: new Date(`${ymd}T23:59:59.999+07:00`).toISOString(),
+  };
+}
+
+function duplicateOffsiteMessage(type: OffsiteType) {
+  return type === 'offsite_in'
+    ? 'วันนี้คุณเช็คอินไปแล้ว'
+    : 'วันนี้คุณเช็คเอาท์ไปแล้ว';
+}
+
 export async function submitOffsite(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -22,13 +43,13 @@ export async function submitOffsite(formData: FormData) {
   }
 
   // Auto-detect direction from today's checkins
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getBangkokDayRange();
   const { data: todays } = await supabase
     .from('checkins')
     .select('type')
     .eq('emp_id', emp.emp_id)
-    .gte('ts', `${today}T00:00:00`)
-    .lte('ts', `${today}T23:59:59`);
+    .gte('ts', today.start)
+    .lte('ts', today.end);
 
   const types = (todays ?? []).map((r) => r.type);
   const hasIn = types.includes('in') || types.includes('offsite_in');
@@ -36,7 +57,7 @@ export async function submitOffsite(formData: FormData) {
 
   if (hasOut) return { error: 'วันนี้ลงเวลาออกครบแล้ว' };
 
-  const type = hasIn ? 'offsite_out' : 'offsite_in';
+  const type: OffsiteType = hasIn ? 'offsite_out' : 'offsite_in';
 
   const photo = formData.get('photo') as File;
   const lat = parseFloat(formData.get('lat') as string);
@@ -65,7 +86,11 @@ export async function submitOffsite(formData: FormData) {
     status: 'approved',
   });
 
-  if (error) return { error: error.message };
+  if (error) {
+    await supabase.storage.from('checkin-photos').remove([filename]);
+    if (error.code === '23505') return { error: duplicateOffsiteMessage(type) };
+    return { error: error.message };
+  }
 
   revalidatePath('/checkin');
   return { ok: true, type };
