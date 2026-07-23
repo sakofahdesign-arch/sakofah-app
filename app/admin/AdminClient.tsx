@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import * as XLSX from 'xlsx';
+import XLSX from 'xlsx-js-style';
 import { getAttendanceDayWarning, getEmployeeDayCellStyle } from '@/lib/attendance-report-excel';
 import { approveDeviceRequest, cleanupMonthlyCheckins, rejectDeviceRequest, resetAllStaffAccess, resetEmployeeAccess } from './actions';
 

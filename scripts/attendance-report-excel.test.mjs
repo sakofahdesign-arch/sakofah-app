@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
+import XLSX from 'xlsx-js-style';
 
 const sourcePath = join(process.cwd(), 'lib', 'attendance-report-excel.ts');
 const source = await readFile(sourcePath, 'utf8');
@@ -51,6 +52,17 @@ assert.deepEqual(
   getEmployeeDayCellStyle(true).fill.fgColor.rgb,
   EMPLOYEE_DAY_WARNING_FILL,
   'warning day style uses the light red fill exported for the employee report',
+);
+
+const workbook = XLSX.utils.book_new();
+const worksheet = XLSX.utils.aoa_to_sheet([['เข้า']]);
+worksheet.A1.s = getEmployeeDayCellStyle(true);
+XLSX.utils.book_append_sheet(workbook, worksheet, 'รายพนักงาน');
+const buffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+assert.match(
+  buffer.toString('latin1'),
+  new RegExp(EMPLOYEE_DAY_WARNING_FILL, 'i'),
+  'written xlsx file contains the warning fill color',
 );
 
 console.log('attendance report excel tests passed');
