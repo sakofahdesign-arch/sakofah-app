@@ -261,7 +261,7 @@ function OffsiteInner() {
             {nativeCapture && (
               <input
                 type="file"
-                accept="image/*;capture=camera"
+                accept="image/*"
                 capture="environment"
                 onChange={handleFile}
                 aria-label="เปิดกล้อง"
@@ -280,7 +280,7 @@ function OffsiteInner() {
         <input
           ref={fileRef}
           type="file"
-          accept="image/*;capture=camera"
+          accept="image/*"
           capture="environment"
           onChange={handleFile}
           style={{ position: 'fixed', left: -9999, top: -9999, width: 1, height: 1, opacity: 0.01 }}

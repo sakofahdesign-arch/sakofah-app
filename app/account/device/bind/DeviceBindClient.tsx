@@ -179,7 +179,7 @@ export default function DeviceBindClient({
             <input
               ref={fileRef}
               type="file"
-              accept="image/*;capture=camera"
+              accept="image/*"
               capture="environment"
               onChange={onCameraFile}
               style={{ position: 'fixed', left: -9999, top: -9999, width: 1, height: 1, opacity: 0.01 }}
@@ -242,7 +242,7 @@ function PermissionFileRow({ icon, title, status, onChange, onOpen }: { icon: st
       <i className={`ti ti-${status === 'ok' ? 'circle-check-filled' : 'chevron-right'}`} style={{ fontSize: 18, color }} aria-hidden></i>
       <input
         type="file"
-        accept="image/*;capture=camera"
+        accept="image/*"
         capture="environment"
         onChange={onChange}
         aria-label={title}
