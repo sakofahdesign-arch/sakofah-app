@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import ts from 'typescript';
+
+const sourcePath = join(process.cwd(), 'lib', 'attendance-report-excel.ts');
+const source = await readFile(sourcePath, 'utf8');
+const { outputText } = ts.transpileModule(source, {
+  compilerOptions: {
+    module: ts.ModuleKind.ES2022,
+    target: ts.ScriptTarget.ES2022,
+    strict: true,
+  },
+});
+
+const tempDir = await mkdtemp(join(tmpdir(), 'attendance-report-excel-'));
+const tempModule = join(tempDir, 'attendance-report-excel.mjs');
+await writeFile(tempModule, outputText, 'utf8');
+
+const {
+  getAttendanceDayWarning,
+  getEmployeeDayCellStyle,
+  EMPLOYEE_DAY_WARNING_FILL,
+} = await import(pathToFileURL(tempModule).href);
+
+const workStart = 8 * 60 + 20;
+const tolerance = 5;
+const workEnd = 16 * 60 + 30;
+
+assert.equal(
+  getAttendanceDayWarning({ inMinutes: 8 * 60 + 26, outMinutes: 16 * 60 + 45, workStart, tolerance, workEnd }),
+  true,
+  'marks the whole day as warning when check-in is later than start plus tolerance',
+);
+
+assert.equal(
+  getAttendanceDayWarning({ inMinutes: 8 * 60 + 20, outMinutes: 16 * 60 + 10, workStart, tolerance, workEnd }),
+  true,
+  'marks the whole day as warning when check-out is earlier than work end',
+);
+
+assert.equal(
+  getAttendanceDayWarning({ inMinutes: 8 * 60 + 25, outMinutes: 16 * 60 + 30, workStart, tolerance, workEnd }),
+  false,
+  'does not mark warning when check-in is within tolerance and check-out is on time',
+);
+
+assert.deepEqual(
+  getEmployeeDayCellStyle(true).fill.fgColor.rgb,
+  EMPLOYEE_DAY_WARNING_FILL,
+  'warning day style uses the light red fill exported for the employee report',
+);
+
+console.log('attendance report excel tests passed');

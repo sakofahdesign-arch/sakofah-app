@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
+import { getAttendanceDayWarning, getEmployeeDayCellStyle } from '@/lib/attendance-report-excel';
 import { approveDeviceRequest, cleanupMonthlyCheckins, rejectDeviceRequest, resetAllStaffAccess, resetEmployeeAccess } from './actions';
 
 type Employee = { emp_id: string; name: string; role: string; active: boolean; branch: string | null; device_id: string | null };
@@ -433,16 +434,6 @@ export default function AdminClient({
       }),
     ];
     ws3['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 1, c: 0 }, e: { r: empRows.length - 1, c: empRows[0].length - 1 } }) };
-    const onTimeCellStyle = {
-      fill: { fgColor: { rgb: 'C6E0B4' } },
-      font: { color: { rgb: '274E13' }, bold: true },
-      alignment: { horizontal: 'center' },
-    };
-    const warningCellStyle = {
-      fill: { fgColor: { rgb: 'F4CCCC' } },
-      font: { color: { rgb: '9C0006' }, bold: true },
-      alignment: { horizontal: 'center' },
-    };
     sortedEmployeeStats.forEach(({ employee: e }, rowIndex) => {
       for (let day = 1; day <= daysInMonth; day++) {
         const pair = byEmpDay.get(`${e.emp_id}|${day}`);
@@ -451,11 +442,22 @@ export default function AdminClient({
         const row = rowIndex + 2;
         const inAddr = XLSX.utils.encode_cell({ r: row, c: inCol });
         const outAddr = XLSX.utils.encode_cell({ r: row, c: outCol });
-        if (pair?.in && ws3[inAddr]) {
-          ws3[inAddr].s = minutesOf(pair.in.ts) > workStartTotalMin ? warningCellStyle : onTimeCellStyle;
+        if (!pair?.in && !pair?.out) continue;
+        const isWarningDay = getAttendanceDayWarning({
+          inMinutes: pair.in ? minutesOf(pair.in.ts) : undefined,
+          outMinutes: pair.out ? minutesOf(pair.out.ts) : undefined,
+          workStart: workStartTotalMin,
+          tolerance,
+          workEnd: workEndTotalMin,
+        });
+        const dayCellStyle = getEmployeeDayCellStyle(isWarningDay);
+        if (pair.in || isWarningDay) {
+          ws3[inAddr] ??= { t: 's', v: '' };
+          ws3[inAddr].s = dayCellStyle;
         }
-        if (pair?.out && ws3[outAddr]) {
-          ws3[outAddr].s = minutesOf(pair.out.ts) < workEndTotalMin ? warningCellStyle : onTimeCellStyle;
+        if (pair.out || isWarningDay) {
+          ws3[outAddr] ??= { t: 's', v: '' };
+          ws3[outAddr].s = dayCellStyle;
         }
       }
     });
