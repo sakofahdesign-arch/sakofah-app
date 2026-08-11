@@ -175,6 +175,9 @@ create unique index if not exists attendance_report_archives_storage_path_key
 create index if not exists attendance_report_archives_month_created_at_idx
   on attendance_report_archives(month, created_at desc);
 
+create index if not exists attendance_report_archives_created_by_idx
+  on attendance_report_archives(created_by);
+
 alter table attendance_report_archives enable row level security;
 
 grant select, insert, update, delete on attendance_report_archives to service_role;
