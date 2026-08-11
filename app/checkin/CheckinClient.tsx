@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { submitCheckin, signOut } from './actions';
 import { getOrCreateDeviceId } from '@/lib/device';
+import { checkinDialogMessage, checkinDialogTitle, formatTimingMs } from '@/lib/checkin-ui';
 
 type Props = {
   empName: string;
@@ -83,6 +84,7 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
   const [holdProgress, setHoldProgress] = useState(0);
   const [sparkle, setSparkle] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [successDialog, setSuccessDialog] = useState<{ type: 'in' | 'out'; timing: string } | null>(null);
   const holdTimer = useRef<number | null>(null);
   const holdStart = useRef<number>(0);
 
@@ -158,6 +160,8 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
     playDing();
     setSparkle(true);
     setTimeout(() => setSparkle(false), 800);
+    const startedAt = performance.now();
+
     startTransition(async () => {
       const deviceId = getOrCreateDeviceId();
       const res = await submitCheckin({ type, lat: coords!.lat, lng: coords!.lng, deviceId });
@@ -171,21 +175,12 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
           return;
         }
         setToast({ kind: 'err', msg: res.error });
-      } else {
-        const ws = settings?.work_start ?? '08:20';
-        const we = settings?.work_end ?? '16:30';
-        const t = now ?? new Date();
-        const nowMin = tsToMin(t.toISOString());
-        let extra = '';
-        if (type === 'in') {
-          const late = Math.max(0, nowMin - timeToMin(ws));
-          extra = late > 0 ? ` — เข้างานสาย ${late} นาที` : ' — ตรงเวลา 👍';
-        } else {
-          const early = Math.max(0, timeToMin(we) - nowMin);
-          extra = early > 0 ? ` — เลิกก่อนเวลา ${early} นาที` : ' — ครบเวลา 👍';
-        }
-        setToast({ kind: 'ok', msg: (type === 'in' ? 'เช็คอินสำเร็จ ✓' : 'เช็คเอาท์สำเร็จ ✓') + extra });
+        return;
       }
+
+      setToast(null);
+      setSuccessDialog({ type, timing: formatTimingMs(performance.now() - startedAt) });
+      setTimeout(() => router.refresh(), 50);
     });
   }
 
@@ -284,14 +279,14 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
           <RoundHoldButton
             color="#d6f26b" textColor="#0e0e10" arrow="up" label="เช็คอิน"
             sub={pending ? 'กำลังบันทึก...' : 'กดค้าง 1 วินาที'}
-            progress={holdProgress} sparkle={sparkle} disabled={pending || !coords}
+            progress={holdProgress} sparkle={sparkle} disabled={pending || !coords || !inRange}
             onStart={() => startHold('in')} onCancel={cancelHold}
           />
         ) : !hasCheckedOut ? (
           <RoundHoldButton
             color="#ff9d9d" textColor="#501313" arrow="down" label="เช็คเอาท์"
             sub={pending ? 'กำลังบันทึก...' : `เข้างานเมื่อ ${formatBangkokTime(todayCheckins.find((c) => c.type === 'in' || c.type === 'offsite_in')?.ts ?? new Date())}`}
-            progress={holdProgress} sparkle={sparkle} disabled={pending || !coords}
+            progress={holdProgress} sparkle={sparkle} disabled={pending || !coords || !inRange}
             onStart={() => startHold('out')} onCancel={cancelHold}
           />
         ) : (
@@ -378,6 +373,20 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
           boxShadow: '0 8px 20px rgba(0,0,0,0.15)', cursor: 'pointer', zIndex: 50
         }}>
           {toast.msg}
+        </div>
+      )}
+
+      {successDialog && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 90, display: 'grid', placeItems: 'center', padding: 18 }}>
+          <div style={{ width: '100%', maxWidth: 320, background: '#fff', borderRadius: 18, padding: 20, textAlign: 'center', boxShadow: '0 18px 40px rgba(0,0,0,0.25)' }}>
+            <i className="ti ti-circle-check-filled" style={{ fontSize: 54, color: '#5dcaa5' }} aria-hidden></i>
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8 }}>{checkinDialogTitle(successDialog.type)}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, marginTop: 4 }}>{checkinDialogMessage()}</div>
+            <div style={{ fontSize: 11, color: '#5c5c60', marginTop: 6 }}>{successDialog.timing}</div>
+            <button type="button" onClick={() => setSuccessDialog(null)} style={{ marginTop: 16, width: '100%', border: 'none', borderRadius: 12, padding: 12, background: '#0e0e10', color: '#d6f26b', fontWeight: 800, cursor: 'pointer' }}>
+              ตกลง
+            </button>
+          </div>
         </div>
       )}
     </main>
