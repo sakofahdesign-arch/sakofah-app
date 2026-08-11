@@ -2,7 +2,21 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createSupabaseAdminClient } from '@supabase/supabase-js';
+import {
+  ATTENDANCE_ARCHIVE_BUCKET,
+  makeArchiveStoragePath,
+  validateSingleMonthDateRange,
+} from '@/lib/attendance-report-archive';
+import {
+  buildAttendanceReportWorkbook,
+  makeAttendanceReportFileName,
+  type AttendanceReportCheckin,
+  type AttendanceReportEmployee,
+  type AttendanceReportSettings,
+} from '@/lib/attendance-report-workbook';
+import { fetchHrApprovedLeaves } from '@/lib/hr-leave-report';
 import { revalidatePath } from 'next/cache';
+import XLSX from 'xlsx-js-style';
 
 const DEFAULT_RESET_PIN = '123456';
 const CHECKIN_PHOTO_BUCKET = 'checkin-photos';
@@ -92,6 +106,50 @@ function createAdminClient() {
   return createSupabaseAdminClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+}
+
+async function loadArchiveReportData(
+  admin: NonNullable<ReturnType<typeof createAdminClient>>,
+  startIso: string,
+  endExclusiveIso: string,
+) {
+  const [employeesRes, checkinsRes, settingsRes, branchesRes] = await Promise.all([
+    admin
+      .from('employees')
+      .select('emp_id, name, role, active, branch, device_id')
+      .order('emp_id'),
+    admin
+      .from('checkins')
+      .select('id, emp_id, type, ts, lat, lng, photo_url, location_note, status, employees!inner(name, branch)')
+      .gte('ts', startIso)
+      .lt('ts', endExclusiveIso)
+      .order('ts', { ascending: true }),
+    admin.from('settings').select('*').limit(1).maybeSingle(),
+    admin.from('branches').select('name').order('created_at', { ascending: true }),
+  ]);
+
+  if (employeesRes.error) throw new Error(employeesRes.error.message);
+  if (checkinsRes.error) throw new Error(checkinsRes.error.message);
+  if (settingsRes.error) throw new Error(settingsRes.error.message);
+  if (branchesRes.error) throw new Error(branchesRes.error.message);
+
+  const checkins = (checkinsRes.data ?? []).map((row) => {
+    const employee = Array.isArray(row.employees) ? row.employees[0] : row.employees;
+    return {
+      ...row,
+      employees: {
+        name: employee?.name ?? '',
+        branch: employee?.branch ?? null,
+      },
+    };
+  }) as AttendanceReportCheckin[];
+
+  return {
+    employees: (employeesRes.data ?? []) as AttendanceReportEmployee[],
+    checkins,
+    settings: (settingsRes.data ?? null) as AttendanceReportSettings,
+    branchNames: (branchesRes.data ?? []).map((row) => row.name).filter((name): name is string => Boolean(name)),
+  };
 }
 
 export async function resetEmployeeAccess(empId: string) {
@@ -196,21 +254,112 @@ export async function resetAllStaffAccess() {
   return { ok: true, message: `รีเซ็ตพนักงาน ${employees.length} คนแล้ว รหัสเริ่มต้นคือ ${DEFAULT_RESET_PIN}` };
 }
 
-export async function cleanupMonthlyCheckins(monthStr: string) {
+export async function createAttendanceArchiveForRange({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
+  const supabase = await requireAdmin();
+  if (!supabase) return { error: 'ไม่มีสิทธิ์' };
+
+  const { data: { user } } = await supabase.auth.getUser();
+  const admin = createAdminClient();
+  if (!admin) return { error: 'ยังไม่ได้ตั้งค่า SUPABASE_SERVICE_ROLE_KEY สำหรับเก็บไฟล์รายงาน' };
+
+  const range = validateSingleMonthDateRange(dateFrom, dateTo);
+  if (!range.ok) return { error: range.error };
+
+  try {
+    const reportData = await loadArchiveReportData(admin, range.startIso, range.endExclusiveIso);
+    const leaveRequests = await fetchHrApprovedLeaves(range.monthStr);
+    const createdAt = new Date();
+    const storagePath = makeArchiveStoragePath(range.monthStr, createdAt);
+    const fileName = makeAttendanceReportFileName(range.monthStr);
+    const wb = buildAttendanceReportWorkbook({
+      ...reportData,
+      adminName: user?.email ?? 'admin',
+      monthStr: range.monthStr,
+      leaveRequests,
+      generatedAt: createdAt,
+    });
+    const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer;
+    const photoCount = reportData.checkins.filter((row) => Boolean(row.photo_url)).length;
+
+    const upload = await admin.storage
+      .from(ATTENDANCE_ARCHIVE_BUCKET)
+      .upload(storagePath, buffer, {
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        upsert: true,
+      });
+    if (upload.error) return { error: upload.error.message };
+
+    const meta = await admin.from('attendance_report_archives').insert({
+      month: range.monthStr,
+      date_from: dateFrom,
+      date_to: dateTo,
+      storage_path: storagePath,
+      file_name: fileName,
+      created_by: user?.id ?? null,
+      checkin_count: reportData.checkins.length,
+      photo_count: photoCount,
+    });
+    if (meta.error) return { error: meta.error.message };
+
+    return {
+      ok: true,
+      monthStr: range.monthStr,
+      checkinCount: reportData.checkins.length,
+      photoCount,
+      storagePath,
+      fileName,
+    };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : 'สร้างไฟล์รายงานไม่สำเร็จ' };
+  }
+}
+
+export async function getAttendanceArchiveDownload(monthStr: string) {
   const supabase = await requireAdmin();
   if (!supabase) return { error: 'ไม่มีสิทธิ์' };
 
   const admin = createAdminClient();
-  if (!admin) return { error: 'ยังไม่ได้ตั้งค่า SUPABASE_SERVICE_ROLE_KEY สำหรับลบข้อมูลสิ้นเดือน' };
+  if (!admin) return { error: 'ยังไม่ได้ตั้งค่า SUPABASE_SERVICE_ROLE_KEY สำหรับโหลดไฟล์รายงาน' };
+  if (!/^\d{4}-\d{2}$/.test(monthStr)) return { error: 'รูปแบบเดือนต้องเป็น YYYY-MM' };
 
-  const range = monthRange(monthStr);
-  if (!range) return { error: 'รูปแบบเดือนต้องเป็น YYYY-MM' };
+  const { data, error } = await admin
+    .from('attendance_report_archives')
+    .select('storage_path, file_name')
+    .eq('month', monthStr)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return { error: error.message };
+  if (!data) return { error: 'ไม่มีไฟล์รายงานของเดือนนี้' };
+
+  const signed = await admin.storage
+    .from(ATTENDANCE_ARCHIVE_BUCKET)
+    .createSignedUrl(data.storage_path, 60, { download: data.file_name });
+  if (signed.error || !signed.data?.signedUrl) {
+    return { error: signed.error?.message ?? 'สร้างลิงก์ดาวน์โหลดไม่สำเร็จ' };
+  }
+
+  return { ok: true, url: signed.data.signedUrl, fileName: data.file_name };
+}
+
+export async function cleanupCheckinsInRange({ dateFrom, dateTo }: { dateFrom: string; dateTo: string }) {
+  const supabase = await requireAdmin();
+  if (!supabase) return { error: 'ไม่มีสิทธิ์' };
+
+  const admin = createAdminClient();
+  if (!admin) return { error: 'ยังไม่ได้ตั้งค่า SUPABASE_SERVICE_ROLE_KEY สำหรับลบข้อมูล' };
+
+  const range = validateSingleMonthDateRange(dateFrom, dateTo);
+  if (!range.ok) return { error: range.error };
+
+  const archive = await createAttendanceArchiveForRange({ dateFrom, dateTo });
+  if (archive.error) return { error: `ยังไม่ลบข้อมูล เพราะเก็บไฟล์ Excel ไม่สำเร็จ: ${archive.error}` };
 
   const { data: rows, error: selectErr } = await admin
     .from('checkins')
     .select('id, photo_url')
-    .gte('ts', range.start)
-    .lt('ts', range.end);
+    .gte('ts', range.startIso)
+    .lt('ts', range.endExclusiveIso);
   if (selectErr) return { error: selectErr.message };
 
   const checkins = rows ?? [];
@@ -228,13 +377,24 @@ export async function cleanupMonthlyCheckins(monthStr: string) {
   const { error: deleteErr } = await admin
     .from('checkins')
     .delete()
-    .gte('ts', range.start)
-    .lt('ts', range.end);
+    .gte('ts', range.startIso)
+    .lt('ts', range.endExclusiveIso);
   if (deleteErr) return { error: deleteErr.message };
 
   revalidatePath('/admin');
   return {
     ok: true,
-    message: `ลบข้อมูล ${monthStr} แล้ว: checkins ${checkins.length} รายการ, รูป ${photosDeleted} ไฟล์`,
+    message: `เก็บ Excel แล้ว และลบข้อมูล ${dateFrom} ถึง ${dateTo}: checkins ${checkins.length} รายการ, รูป ${photosDeleted} ไฟล์`,
   };
+}
+
+export async function cleanupMonthlyCheckins(monthStr: string) {
+  const range = monthRange(monthStr);
+  if (!range) return { error: 'รูปแบบเดือนต้องเป็น YYYY-MM' };
+  const [year, month] = monthStr.split('-').map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  return cleanupCheckinsInRange({
+    dateFrom: `${monthStr}-01`,
+    dateTo: `${monthStr}-${String(lastDay).padStart(2, '0')}`,
+  });
 }
