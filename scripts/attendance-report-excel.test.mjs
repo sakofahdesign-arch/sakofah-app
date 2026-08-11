@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript';
 import XLSX from 'xlsx-js-style';
+
+const require = createRequire(import.meta.url);
 
 const sourcePath = join(process.cwd(), 'lib', 'attendance-report-excel.ts');
 const source = await readFile(sourcePath, 'utf8');
@@ -108,5 +111,71 @@ assert.equal(
   false,
   'ignores HR leave requests that are not finally approved',
 );
+
+async function testWorkbookBuilderExportsLeaveCells() {
+  const helperSourcePath = join(process.cwd(), 'lib', 'attendance-report-excel.ts');
+  const builderSourcePath = join(process.cwd(), 'lib', 'attendance-report-workbook.ts');
+  const helperSource = await readFile(helperSourcePath, 'utf8');
+  const builderSource = await readFile(builderSourcePath, 'utf8');
+
+  const helperOutput = ts.transpileModule(helperSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.ES2022,
+      target: ts.ScriptTarget.ES2022,
+      strict: true,
+    },
+  }).outputText;
+  const xlsxModuleUrl = pathToFileURL(require.resolve('xlsx-js-style')).href;
+  const builderOutput = ts.transpileModule(
+    builderSource
+      .replace("from 'xlsx-js-style'", `from '${xlsxModuleUrl}'`)
+      .replace("from './attendance-report-excel'", "from './attendance-report-excel.mjs'"),
+    {
+      compilerOptions: {
+        module: ts.ModuleKind.ES2022,
+        target: ts.ScriptTarget.ES2022,
+        strict: true,
+      },
+    },
+  ).outputText;
+
+  const builderTempDir = await mkdtemp(join(tmpdir(), 'attendance-report-workbook-'));
+  await writeFile(join(builderTempDir, 'attendance-report-excel.mjs'), helperOutput, 'utf8');
+  const builderTempModule = join(builderTempDir, 'attendance-report-workbook.mjs');
+  await writeFile(builderTempModule, builderOutput, 'utf8');
+
+  const { buildAttendanceReportWorkbook, makeAttendanceReportFileName } = await import(pathToFileURL(builderTempModule).href);
+  const wb = buildAttendanceReportWorkbook({
+    adminName: 'Admin Test',
+    monthStr: '2026-07',
+    employees: [
+      { emp_id: '690002', name: 'Test Employee', role: 'staff', active: true, branch: 'HQ', device_id: null },
+    ],
+    checkins: [],
+    settings: {
+      office_lat: 0,
+      office_lng: 0,
+      radius_m: 100,
+      allowed_ssid: '',
+      work_start: '08:20',
+      work_end: '16:30',
+      late_tolerance_min: 5,
+      work_days: 'MTWTF',
+    },
+    branchNames: ['HQ'],
+    leaveRequests: [
+      { empId: '690002', type: 'ลาป่วย', start: '2026-07-10', end: '2026-07-10', status: 'Approved' },
+    ],
+    generatedAt: new Date('2026-07-31T00:00:00.000Z'),
+  });
+
+  assert.equal(makeAttendanceReportFileName('2026-07'), 'attendance-report-2026-07.xlsx');
+  const leaveCells = wb.SheetNames.flatMap((sheetName) =>
+    Object.values(wb.Sheets[sheetName]).filter((cell) => cell && typeof cell === 'object' && cell.v === 'ลาป่วย'),
+  );
+  assert.equal(leaveCells.length, 1, 'leave text should be written once in a merged employee day cell');
+}
+
+await testWorkbookBuilderExportsLeaveCells();
 
 console.log('attendance report excel tests passed');
