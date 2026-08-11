@@ -5,12 +5,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { submitCheckin, signOut } from './actions';
 import { getOrCreateDeviceId } from '@/lib/device';
+import { getDeviceAccessNotice, resolveDeviceAccess } from '@/lib/device-access';
 import { checkinDialogMessage, checkinDialogTitle, formatTimingMs } from '@/lib/checkin-ui';
 
 type Props = {
   empName: string;
   empId: string;
   role: string;
+  boundDeviceId: string | null;
   todayCheckins: { type: string; ts: string }[];
   settings: {
     office_lat: number; office_lng: number; radius_m: number;
@@ -74,9 +76,10 @@ function earlyMin(ts: string, workEnd: string): number {
 
 const HOLD_DURATION = 1000; // 1 วินาที
 
-export default function CheckinClient({ empName, empId, role, todayCheckins, settings, checkinLocation }: Props) {
+export default function CheckinClient({ empName, empId, role, boundDeviceId, todayCheckins, settings, checkinLocation }: Props) {
   const router = useRouter();
   const [now, setNow] = useState<Date | null>(null);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsError, setGpsError] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: 'ok' | 'err'; msg: string } | null>(null);
@@ -92,6 +95,10 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
     setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    setDeviceId(getOrCreateDeviceId());
   }, []);
 
   useEffect(() => {
@@ -133,6 +140,10 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
   }
 
   function startHold(type: 'in' | 'out') {
+    if (deviceBlocked) {
+      setToast({ kind: 'err', msg: deviceNotice?.message ?? 'กำลังตรวจสอบเครื่องที่ใช้งาน' });
+      return;
+    }
     if (!coords) { setToast({ kind: 'err', msg: 'ยังหาตำแหน่ง GPS ไม่เจอ' }); return; }
     setHoldProgress(0);
     holdStart.current = Date.now();
@@ -187,6 +198,12 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
   const timeStr = now ? formatBangkokTime(now) : '--:--';
   const dateStr = now ? now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', timeZone: BANGKOK_TIME_ZONE }) : '';
   const workDays = settings?.work_days === 'MTWTF' ? 'จ–ศ' : 'ทุกวัน';
+  const deviceAccess = resolveDeviceAccess(role, boundDeviceId, deviceId);
+  const deviceBlocked = deviceAccess.blocked;
+  const deviceNotice = getDeviceAccessNotice(deviceAccess.status);
+  const deviceBlockedSub = deviceAccess.status === 'checking' ? 'กำลังตรวจสอบเครื่อง...' : 'กรุณาขอเปลี่ยนเครื่องก่อน';
+  const disabledButtonColor = '#d6d3c8';
+  const disabledButtonText = '#5c5c60';
 
   // GPS chip styling — black bg with lime border (in range) or red border (out of range)
   const gpsBorder = !coords ? '#5c5c60' : inRange ? '#d6f26b' : '#e24b4a';
@@ -273,20 +290,22 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
         </div>
       </div>
 
+      {deviceNotice && <DeviceAccessBanner notice={deviceNotice} />}
+
       {/* MAIN ROUND ACTION BUTTON */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 18 }}>
         {!hasCheckedIn ? (
           <RoundHoldButton
-            color="#d6f26b" textColor="#0e0e10" arrow="up" label="เช็คอิน"
-            sub={pending ? 'กำลังบันทึก...' : 'กดค้าง 1 วินาที'}
-            progress={holdProgress} sparkle={sparkle} disabled={pending || !coords || !inRange}
+            color={deviceBlocked ? disabledButtonColor : '#d6f26b'} textColor={deviceBlocked ? disabledButtonText : '#0e0e10'} arrow="up" label="เช็คอิน"
+            sub={deviceBlocked ? deviceBlockedSub : pending ? 'กำลังบันทึก...' : 'กดค้าง 1 วินาที'}
+            progress={holdProgress} sparkle={sparkle} disabled={pending || !coords || !inRange || deviceBlocked}
             onStart={() => startHold('in')} onCancel={cancelHold}
           />
         ) : !hasCheckedOut ? (
           <RoundHoldButton
-            color="#ff9d9d" textColor="#501313" arrow="down" label="เช็คเอาท์"
-            sub={pending ? 'กำลังบันทึก...' : `เข้างานเมื่อ ${formatBangkokTime(todayCheckins.find((c) => c.type === 'in' || c.type === 'offsite_in')?.ts ?? new Date())}`}
-            progress={holdProgress} sparkle={sparkle} disabled={pending || !coords || !inRange}
+            color={deviceBlocked ? disabledButtonColor : '#ff9d9d'} textColor={deviceBlocked ? disabledButtonText : '#501313'} arrow="down" label="เช็คเอาท์"
+            sub={deviceBlocked ? deviceBlockedSub : pending ? 'กำลังบันทึก...' : `เข้างานเมื่อ ${formatBangkokTime(todayCheckins.find((c) => c.type === 'in' || c.type === 'offsite_in')?.ts ?? new Date())}`}
+            progress={holdProgress} sparkle={sparkle} disabled={pending || !coords || !inRange || deviceBlocked}
             onStart={() => startHold('out')} onCancel={cancelHold}
           />
         ) : (
@@ -299,7 +318,18 @@ export default function CheckinClient({ empName, empId, role, todayCheckins, set
       </div>
 
       {/* Off-site card — orange (enabled) or faded grey (disabled when day complete) */}
-      {hasCheckedOut ? (
+      {deviceBlocked ? (
+        <div style={{ background: '#d6d3c8', borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, opacity: 0.72, cursor: 'not-allowed' }}>
+          <div style={{ width: 46, height: 46, borderRadius: 14, background: 'rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <i className="ti ti-map-pin-off" style={{ fontSize: 24, color: '#0e0e10' }} aria-hidden></i>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#0e0e10' }}>ลงเวลานอกสถานที่</div>
+            <div style={{ fontSize: 11, color: '#0e0e10', opacity: 0.7 }}>{deviceBlockedSub}</div>
+          </div>
+          <i className="ti ti-lock" style={{ fontSize: 16, color: '#0e0e10', opacity: 0.5 }} aria-hidden></i>
+        </div>
+      ) : hasCheckedOut ? (
         <div style={{ background: '#d6d3c8', borderRadius: 18, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, opacity: 0.65, cursor: 'not-allowed' }}>
           <div style={{ width: 46, height: 46, borderRadius: 14, background: 'rgba(0,0,0,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <i className="ti ti-map-pin-off" style={{ fontSize: 24, color: '#0e0e10' }} aria-hidden></i>
@@ -398,6 +428,26 @@ function MenuItem({ icon, label, href }: { icon: string; label: string; href: st
     <Link href={href} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', color: '#fff', fontSize: 13, borderRadius: 10, textDecoration: 'none' }}>
       <i className={`ti ti-${icon}`} style={{ fontSize: 16, color: '#d6f26b' }} aria-hidden></i>{label}
     </Link>
+  );
+}
+
+function DeviceAccessBanner({ notice }: { notice: NonNullable<ReturnType<typeof getDeviceAccessNotice>> }) {
+  return (
+    <div style={{ background: '#fff0d9', border: '0.5px solid rgba(163,45,45,0.22)', borderRadius: 16, padding: 12, marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <div style={{ width: 34, height: 34, borderRadius: 12, background: '#a32d2d', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' }}>
+          <i className="ti ti-device-mobile-x" style={{ fontSize: 18 }} aria-hidden></i>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#0e0e10' }}>{notice.title}</div>
+          <div style={{ fontSize: 11, color: '#6f2424', lineHeight: 1.45, marginTop: 2 }}>{notice.message}</div>
+          <Link href={notice.actionHref} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, background: '#0e0e10', color: '#d6f26b', borderRadius: 10, padding: '7px 10px', fontSize: 11, fontWeight: 800, textDecoration: 'none' }}>
+            <i className="ti ti-send" style={{ fontSize: 12 }} aria-hidden></i>
+            {notice.actionLabel}
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }
 

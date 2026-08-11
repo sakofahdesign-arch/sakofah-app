@@ -88,6 +88,7 @@ export default async function CheckinPage() {
       empName={emp.name}
       empId={emp.emp_id}
       role={emp.role}
+      boundDeviceId={emp.device_id}
       todayCheckins={todayCheckins ?? []}
       settings={settings}
       checkinLocation={checkinLocation}

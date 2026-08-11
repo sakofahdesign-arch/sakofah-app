@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { submitOffsite } from './actions';
 import { getOrCreateDeviceId } from '@/lib/device';
+import { getDeviceAccessNotice, resolveDeviceAccess } from '@/lib/device-access';
 import { checkinDialogMessage, checkinDialogTitle, formatTimingMs } from '@/lib/checkin-ui';
 import { OFFSITE_PHOTO_QUALITY, fitImageDimensions } from '@/lib/offsite-photo';
 
@@ -33,6 +34,9 @@ function OffsiteInner() {
   const [photo, setPhoto] = useState<Blob | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
+  const [boundDeviceId, setBoundDeviceId] = useState<string | null>(null);
   const [now, setNow] = useState<Date | null>(null);
   const [location, setLocation] = useState('');
   const [direction, setDirection] = useState<'in' | 'out'>('in');
@@ -61,8 +65,10 @@ function OffsiteInner() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-      const { data: emp } = await supabase.from('employees').select('emp_id').eq('id', user.id).single();
+      const { data: emp } = await supabase.from('employees').select('emp_id, role, device_id').eq('id', user.id).single();
       if (!emp) return;
+      setRole(emp.role);
+      setBoundDeviceId(emp.device_id);
       const today = getBangkokDayRange();
       const { data: rows } = await supabase.from('checkins').select('type')
         .eq('emp_id', emp.emp_id)
@@ -72,6 +78,10 @@ function OffsiteInner() {
       const hasIn = types.includes('in') || types.includes('offsite_in');
       setDirection(hasIn ? 'out' : 'in');
     })();
+  }, []);
+
+  useEffect(() => {
+    setDeviceId(getOrCreateDeviceId());
   }, []);
 
   useEffect(() => {
@@ -90,6 +100,10 @@ function OffsiteInner() {
 
   async function startCamera(mode: 'environment' | 'user' = facing) {
     setErr(null);
+    if (deviceBlocked) {
+      setErr(deviceNotice?.message ?? 'กำลังตรวจสอบเครื่องที่ใช้งาน');
+      return;
+    }
     // LINE/in-app หรือเคยล้มเหลวมาแล้ว → เปิดกล้องเนทีฟตรงๆ แบบ sync (ต้องอยู่ใน user gesture)
     // สำคัญ: ห้ามเรียก .click() หลัง await เพราะจะเสีย user gesture แล้วบราวเซอร์บล็อก
     if (camFallback || isInAppBrowser() || !navigator.mediaDevices?.getUserMedia) {
@@ -205,6 +219,10 @@ function OffsiteInner() {
   }
 
   function submit() {
+    if (deviceBlocked) {
+      setErr(deviceNotice?.message ?? 'กำลังตรวจสอบเครื่องที่ใช้งาน');
+      return;
+    }
     if (!photo || !coords || !location) {
       setErr('กรุณาถ่ายรูป + กรอกสถานที่ก่อน');
       return;
@@ -235,6 +253,11 @@ function OffsiteInner() {
   const dirLabel = direction === 'in' ? 'Off-site IN' : 'Off-site OUT';
   const dirIcon = direction === 'in' ? 'arrow-big-up-line-filled' : 'arrow-big-down-line-filled';
   const nativeCapture = camFallback || isInAppBrowser() || typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia;
+  const deviceAccess = resolveDeviceAccess(role, boundDeviceId, deviceId);
+  const deviceBlocked = deviceAccess.blocked;
+  const deviceNotice = getDeviceAccessNotice(deviceAccess.status);
+  const actionColor = deviceBlocked ? '#d6d3c8' : dirColor;
+  const actionText = deviceBlocked ? '#5c5c60' : dirText;
 
   return (
     <main style={{ minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 18 }}>
@@ -251,18 +274,20 @@ function OffsiteInner() {
         </div>
       </div>
 
+      {deviceNotice && <DeviceAccessBanner notice={deviceNotice} />}
+
       {/* Camera */}
       <div style={{ borderRadius: 20, overflow: 'hidden', background: '#0e0e10', height: 320, position: 'relative', marginBottom: 12 }}>
         {!stream && !photoUrl && (
           <>
-            <button onClick={() => startCamera()} style={{
-              position: 'absolute', inset: 0, background: '#0e0e10', color: '#fff', border: 'none', cursor: 'pointer',
+            <button onClick={() => startCamera()} disabled={deviceBlocked} style={{
+              position: 'absolute', inset: 0, background: deviceBlocked ? '#d6d3c8' : '#0e0e10', color: deviceBlocked ? '#5c5c60' : '#fff', border: 'none', cursor: deviceBlocked ? 'not-allowed' : 'pointer',
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10
             }}>
-              <i className="ti ti-camera" style={{ fontSize: 44, color: dirColor }} aria-hidden></i>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>แตะเพื่อเปิดกล้อง</span>
+              <i className={deviceBlocked ? 'ti ti-lock' : 'ti ti-camera'} style={{ fontSize: 44, color: deviceBlocked ? actionText : actionColor }} aria-hidden></i>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>{deviceBlocked ? 'เครื่องนี้ยังไม่ได้รับอนุญาต' : 'แตะเพื่อเปิดกล้อง'}</span>
               <span style={{ fontSize: 11, color: '#c9c9cc' }}>
-                {nativeCapture ? 'LINE จะเปิดกล้องของเครื่องโดยตรง' : 'ระบบจะขออนุญาตเข้าถึงกล้อง'}
+                {deviceBlocked ? 'กรุณาส่งคำขอเปลี่ยนเครื่องก่อน' : nativeCapture ? 'LINE จะเปิดกล้องของเครื่องโดยตรง' : 'ระบบจะขออนุญาตเข้าถึงกล้อง'}
               </span>
             </button>
             {nativeCapture && (
@@ -271,6 +296,7 @@ function OffsiteInner() {
                 accept="image/*"
                 capture="environment"
                 onChange={handleFile}
+                disabled={deviceBlocked}
                 aria-label="เปิดกล้อง"
                 style={{ position: 'absolute', inset: 0, opacity: 0.01, cursor: 'pointer' }}
               />
@@ -302,12 +328,12 @@ function OffsiteInner() {
             }}>
               <i className="ti ti-camera-rotate" style={{ fontSize: 20 }} aria-hidden></i>
             </button>
-            <button onClick={takePhoto} style={{
+            <button onClick={takePhoto} disabled={deviceBlocked} style={{
               position: 'absolute', bottom: 12, left: '50%', transform: 'translateX(-50%)',
-              width: 64, height: 64, borderRadius: '50%', background: dirColor,
-              border: '4px solid #fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
+              width: 64, height: 64, borderRadius: '50%', background: actionColor,
+              border: '4px solid #fff', cursor: deviceBlocked ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center'
             }}>
-              <i className="ti ti-camera" style={{ fontSize: 28, color: dirText }} aria-hidden></i>
+              <i className="ti ti-camera" style={{ fontSize: 28, color: actionText }} aria-hidden></i>
             </button>
           </>
         )}
@@ -357,15 +383,15 @@ function OffsiteInner() {
         </div>
       )}
 
-      <button onClick={submit} disabled={pending || !photo || !coords || !location}
+      <button onClick={submit} disabled={pending || !photo || !coords || !location || deviceBlocked}
         style={{
-          background: dirColor, color: dirText, border: 'none', borderRadius: 14,
-          padding: 14, fontWeight: 700, fontSize: 14, width: '100%', cursor: 'pointer',
-          opacity: (pending || !photo || !coords || !location) ? 0.5 : 1,
+          background: actionColor, color: actionText, border: 'none', borderRadius: 14,
+          padding: 14, fontWeight: 700, fontSize: 14, width: '100%', cursor: deviceBlocked ? 'not-allowed' : 'pointer',
+          opacity: (pending || !photo || !coords || !location || deviceBlocked) ? 0.5 : 1,
         }}
       >
         <i className={`ti ti-${dirIcon}`} style={{ fontSize: 16, marginRight: 6, verticalAlign: -3 }} aria-hidden></i>
-        {pending ? 'กำลังส่ง...' : `ยืนยันส่ง Off-site ${direction === 'in' ? 'IN' : 'OUT'}`}
+        {deviceBlocked ? 'ไม่สามารถลงเวลาจากเครื่องนี้ได้' : pending ? 'กำลังส่ง...' : `ยืนยันส่ง Off-site ${direction === 'in' ? 'IN' : 'OUT'}`}
       </button>
 
       <div style={{ marginTop: 14, fontSize: 10, color: '#5c5c60', textAlign: 'center' }}>
@@ -385,5 +411,25 @@ function OffsiteInner() {
         </div>
       )}
     </main>
+  );
+}
+
+function DeviceAccessBanner({ notice }: { notice: NonNullable<ReturnType<typeof getDeviceAccessNotice>> }) {
+  return (
+    <div style={{ background: '#fff0d9', border: '0.5px solid rgba(163,45,45,0.22)', borderRadius: 16, padding: 12, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <div style={{ width: 34, height: 34, borderRadius: 12, background: '#a32d2d', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' }}>
+          <i className="ti ti-device-mobile-x" style={{ fontSize: 18 }} aria-hidden></i>
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#0e0e10' }}>{notice.title}</div>
+          <div style={{ fontSize: 11, color: '#6f2424', lineHeight: 1.45, marginTop: 2 }}>{notice.message}</div>
+          <Link href={notice.actionHref} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, marginTop: 8, background: '#0e0e10', color: '#d6f26b', borderRadius: 10, padding: '7px 10px', fontSize: 11, fontWeight: 800, textDecoration: 'none' }}>
+            <i className="ti ti-send" style={{ fontSize: 12 }} aria-hidden></i>
+            {notice.actionLabel}
+          </Link>
+        </div>
+      </div>
+    </div>
   );
 }
