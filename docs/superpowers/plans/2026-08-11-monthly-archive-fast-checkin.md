@@ -100,7 +100,23 @@ Add this to `scripts/attendance-report-excel.test.mjs`:
 
 ```js
 async function testWorkbookBuilderExportsLeaveCells() {
-  const { buildAttendanceReportWorkbook, makeAttendanceReportFileName } = await import('../lib/attendance-report-workbook.ts');
+  const builderSourcePath = join(process.cwd(), 'lib', 'attendance-report-workbook.ts');
+  const helperSourcePath = join(process.cwd(), 'lib', 'attendance-report-excel.ts');
+  const builderSource = await readFile(builderSourcePath, 'utf8');
+  const helperSource = await readFile(helperSourcePath, 'utf8');
+  const helperTranspiled = ts.transpileModule(helperSource, {
+    compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022, strict: true },
+  }).outputText;
+  const builderTranspiled = ts.transpileModule(
+    builderSource.replace("from './attendance-report-excel'", "from './attendance-report-excel.mjs'"),
+    { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022, strict: true } },
+  ).outputText;
+  const builderTempDir = await mkdtemp(join(tmpdir(), 'attendance-report-workbook-'));
+  await writeFile(join(builderTempDir, 'attendance-report-excel.mjs'), helperTranspiled, 'utf8');
+  const builderTempModule = join(builderTempDir, 'attendance-report-workbook.mjs');
+  await writeFile(builderTempModule, builderTranspiled, 'utf8');
+  const { buildAttendanceReportWorkbook, makeAttendanceReportFileName } = await import(pathToFileURL(builderTempModule).href);
+
   const wb = buildAttendanceReportWorkbook({
     adminName: 'Admin Test',
     monthStr: '2026-07',
