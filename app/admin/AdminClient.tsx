@@ -4,7 +4,13 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import XLSX from 'xlsx-js-style';
-import { getAttendanceDayWarning, getEmployeeDayCellStyle } from '@/lib/attendance-report-excel';
+import {
+  buildApprovedLeaveDayMap,
+  getAttendanceDayWarning,
+  getEmployeeDayCellStyle,
+  getEmployeeLeaveCellStyle,
+  type HrLeaveRequest,
+} from '@/lib/attendance-report-excel';
 import { approveDeviceRequest, cleanupMonthlyCheckins, rejectDeviceRequest, resetAllStaffAccess, resetEmployeeAccess } from './actions';
 
 type Employee = { emp_id: string; name: string; role: string; active: boolean; branch: string | null; device_id: string | null };
@@ -52,7 +58,7 @@ type View = 'daily' | 'weekly' | 'monthly';
 type TypeFilter = 'all' | 'in' | 'out' | 'offsite';
 
 export default function AdminClient({
-  adminName, monthStr, employees, checkins, settings, deviceRequests, branchNames,
+  adminName, monthStr, employees, checkins, settings, deviceRequests, branchNames, leaveRequests,
 }: {
   adminName: string;
   monthStr: string;
@@ -61,6 +67,7 @@ export default function AdminClient({
   settings: Settings;
   deviceRequests: DeviceRequest[];
   branchNames: string[];
+  leaveRequests: HrLeaveRequest[];
 }) {
   const [view, setView] = useState<View>('daily');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
@@ -233,6 +240,7 @@ export default function AdminClient({
     const [year, month] = monthStr.split('-').map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
     const generatedAt = new Date();
+    const leaveDayMap = buildApprovedLeaveDayMap(leaveRequests, year, month);
 
     wb.Props = {
       Title: `รายงานลงเวลา ${monthStr}`,
@@ -406,6 +414,12 @@ export default function AdminClient({
     sortedEmployeeStats.forEach(({ employee: e, checkinDays, late, offsite, onTimeRate }) => {
       const row: (string | number)[] = [e.emp_id, e.name, e.branch ?? '', e.role, checkinDays, late, offsite, onTimeRate];
       for (let day = 1; day <= daysInMonth; day++) {
+        const leaveLabel = leaveDayMap.get(`${e.emp_id}|${day}`);
+        if (leaveLabel) {
+          row.push(leaveLabel, '');
+          continue;
+        }
+
         const pair = byEmpDay.get(`${e.emp_id}|${day}`);
         const lateMinutes = pair?.in ? Math.max(0, minutesOf(pair.in.ts) - workStartTotalMin) : 0;
         const earlyMinutes = pair?.out ? Math.max(0, workEndTotalMin - minutesOf(pair.out.ts)) : 0;
@@ -432,16 +446,34 @@ export default function AdminClient({
         const c = 8 + i * 2;
         return { s: { r: 0, c }, e: { r: 0, c: c + 1 } };
       }),
+      ...sortedEmployeeStats.flatMap(({ employee: e }, rowIndex) => (
+        Array.from({ length: daysInMonth }, (_, i) => {
+          const day = i + 1;
+          const c = 8 + i * 2;
+          const r = rowIndex + 2;
+          return leaveDayMap.has(`${e.emp_id}|${day}`) ? [{ s: { r, c }, e: { r, c: c + 1 } }] : [];
+        }).flat()
+      )),
     ];
     ws3['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 1, c: 0 }, e: { r: empRows.length - 1, c: empRows[0].length - 1 } }) };
     sortedEmployeeStats.forEach(({ employee: e }, rowIndex) => {
       for (let day = 1; day <= daysInMonth; day++) {
+        const leaveLabel = leaveDayMap.get(`${e.emp_id}|${day}`);
         const pair = byEmpDay.get(`${e.emp_id}|${day}`);
         const inCol = 8 + (day - 1) * 2;
         const outCol = inCol + 1;
         const row = rowIndex + 2;
         const inAddr = XLSX.utils.encode_cell({ r: row, c: inCol });
         const outAddr = XLSX.utils.encode_cell({ r: row, c: outCol });
+        if (leaveLabel) {
+          const leaveCellStyle = getEmployeeLeaveCellStyle();
+          ws3[inAddr] ??= { t: 's', v: leaveLabel };
+          ws3[inAddr].s = leaveCellStyle;
+          ws3[outAddr] ??= { t: 's', v: '' };
+          ws3[outAddr].s = leaveCellStyle;
+          continue;
+        }
+
         if (!pair?.in && !pair?.out) continue;
         const isWarningDay = getAttendanceDayWarning({
           inMinutes: pair.in ? minutesOf(pair.in.ts) : undefined,

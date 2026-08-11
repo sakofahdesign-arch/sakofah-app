@@ -24,6 +24,9 @@ const {
   getAttendanceDayWarning,
   getEmployeeDayCellStyle,
   EMPLOYEE_DAY_WARNING_FILL,
+  EMPLOYEE_DAY_LEAVE_FILL,
+  getEmployeeLeaveCellStyle,
+  buildApprovedLeaveDayMap,
 } = await import(pathToFileURL(tempModule).href);
 
 const workStart = 8 * 60 + 20;
@@ -63,6 +66,47 @@ assert.match(
   buffer.toString('latin1'),
   new RegExp(EMPLOYEE_DAY_WARNING_FILL, 'i'),
   'written xlsx file contains the warning fill color',
+);
+
+assert.deepEqual(
+  getEmployeeLeaveCellStyle().fill.fgColor.rgb,
+  EMPLOYEE_DAY_LEAVE_FILL,
+  'HR leave day style uses the leave fill exported for the employee report',
+);
+
+const leaveDayMap = buildApprovedLeaveDayMap(
+  [
+    { empId: 'E001', type: 'ลาป่วย', start: '10/07/2026', end: '10/07/2026', status: 'Approved' },
+    { empId: 'E001', type: 'ลากิจ', start: '12/07/2026', end: '14/07/2026', status: 'Approved' },
+    { empId: 'E002', type: 'ลาพักผ่อน', start: '30/06/2026', end: '02/07/2026', status: 'Approved' },
+    { empId: 'E001', type: 'ลาคลอด', start: '20/07/2026', end: '20/07/2026', status: 'Pending' },
+  ],
+  2026,
+  7,
+);
+
+assert.equal(
+  leaveDayMap.get('E001|10'),
+  'ลาป่วย',
+  'maps an approved one-day HR leave to the matching employee/day cell',
+);
+
+assert.equal(
+  leaveDayMap.get('E001|13'),
+  'ลากิจ',
+  'expands an approved multi-day HR leave across every day in the report month',
+);
+
+assert.equal(
+  leaveDayMap.get('E002|1'),
+  'ลาพักผ่อน',
+  'keeps the in-month portion when an approved HR leave starts before the report month',
+);
+
+assert.equal(
+  leaveDayMap.has('E001|20'),
+  false,
+  'ignores HR leave requests that are not finally approved',
 );
 
 console.log('attendance report excel tests passed');

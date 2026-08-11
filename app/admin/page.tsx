@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server';
+import { fetchHrApprovedLeaves } from '@/lib/hr-leave-report';
 import { redirect } from 'next/navigation';
 import AdminClient from './AdminClient';
 
@@ -17,7 +18,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const start = new Date(y, m - 1, 1).toISOString();
   const end = new Date(y, m, 1).toISOString();
 
-  const [empsRes, checkinsRes, settingsRes, deviceReqRes, branchesRes] = await Promise.all([
+  const [empsRes, checkinsRes, settingsRes, deviceReqRes, branchesRes, leaveRequests] = await Promise.all([
     supabase.from('employees').select('emp_id, name, role, active, branch, device_id'),
     supabase.from('checkins').select('*, employees!inner(name, branch)').gte('ts', start).lt('ts', end).order('ts', { ascending: false }),
     supabase.from('settings').select('*').single(),
@@ -26,6 +27,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       .eq('status', 'pending')
       .order('created_at', { ascending: false }),
     supabase.from('branches').select('name').order('created_at', { ascending: true }),
+    fetchHrApprovedLeaves(monthStr),
   ]);
 
   return (
@@ -37,6 +39,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       settings={settingsRes.data}
       deviceRequests={deviceReqRes.data ?? []}
       branchNames={(branchesRes.data ?? []).map((b) => b.name)}
+      leaveRequests={leaveRequests}
     />
   );
 }
