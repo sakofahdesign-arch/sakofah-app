@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import XLSX from 'xlsx-js-style';
+import { decideMonthExport } from '@/lib/attendance-report-archive';
 import { buildAttendanceReportWorkbook, makeAttendanceReportFileName } from '@/lib/attendance-report-workbook';
 import type { HrLeaveRequest } from '@/lib/attendance-report-excel';
-import { approveDeviceRequest, cleanupMonthlyCheckins, rejectDeviceRequest, resetAllStaffAccess, resetEmployeeAccess } from './actions';
+import { approveDeviceRequest, cleanupMonthlyCheckins, getAttendanceArchiveDownload, rejectDeviceRequest, resetAllStaffAccess, resetEmployeeAccess } from './actions';
 
 type Employee = { emp_id: string; name: string; role: string; active: boolean; branch: string | null; device_id: string | null };
 type Checkin = {
@@ -230,17 +231,47 @@ export default function AdminClient({
       });
   }, [checkins, typeFilter, branchFilter, dateFrom, dateTo, search]);
 
-  function exportExcel() {
-    const wb = buildAttendanceReportWorkbook({
-      adminName,
-      monthStr,
-      employees,
-      checkins,
-      settings,
-      branchNames: branches,
-      leaveRequests,
-    });
-    XLSX.writeFile(wb, makeAttendanceReportFileName(monthStr), { cellStyles: true });
+  async function exportExcel() {
+    setLiveNotice('กำลังเตรียมไฟล์ Excel...');
+    const decision = decideMonthExport(checkins.length, true);
+
+    if (decision.kind === 'live') {
+      const wb = buildAttendanceReportWorkbook({
+        adminName,
+        monthStr,
+        employees,
+        checkins,
+        settings,
+        branchNames: branches,
+        leaveRequests,
+      });
+      XLSX.writeFile(wb, makeAttendanceReportFileName(monthStr), { cellStyles: true });
+      setLiveNotice('ดาวน์โหลดรายงานจากข้อมูลปัจจุบันแล้ว');
+      setTimeout(() => setLiveNotice(null), 2200);
+      return;
+    }
+
+    const res = await getAttendanceArchiveDownload(monthStr);
+    if (!('ok' in res)) {
+      const message = ('error' in res && res.error) ? res.error : 'โหลดไฟล์รายงานไม่สำเร็จ';
+      setLiveNotice(message === 'ไม่มีไฟล์รายงานของเดือนนี้' ? 'ไม่มีไฟล์' : message);
+      setTimeout(() => setLiveNotice(null), 2600);
+      return;
+    }
+    if (!res.url || !res.fileName) {
+      setLiveNotice('โหลดไฟล์รายงานไม่สำเร็จ');
+      setTimeout(() => setLiveNotice(null), 2600);
+      return;
+    }
+
+    const link = document.createElement('a');
+    link.href = res.url;
+    link.download = res.fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setLiveNotice('ดาวน์โหลดไฟล์รายงานที่เก็บไว้แล้ว');
+    setTimeout(() => setLiveNotice(null), 2200);
   }
 
   return (
@@ -287,7 +318,7 @@ export default function AdminClient({
           <button onClick={handleCleanupMonth} disabled={isPending} style={{ background: '#fff', color: '#a32d2d', border: '0.5px solid rgba(163,45,45,0.25)', borderRadius: 10, padding: '7px 12px', fontSize: 12, fontWeight: 700, cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.55 : 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
             <i className="ti ti-trash" style={{ fontSize: 13 }} aria-hidden></i>ลบข้อมูลเดือนนี้
           </button>
-          <button onClick={exportExcel} style={{ background: C.dark, color: C.lime, border: 'none', borderRadius: 10, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          <button onClick={() => void exportExcel()} style={{ background: C.dark, color: C.lime, border: 'none', borderRadius: 10, padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <i className="ti ti-file-spreadsheet" style={{ fontSize: 14 }} aria-hidden></i>Export Excel
           </button>
         </div>
