@@ -4,10 +4,10 @@ import { useEffect, useMemo, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import XLSX from 'xlsx-js-style';
-import { decideMonthExport } from '@/lib/attendance-report-archive';
+import { decideMonthExport, validateSingleMonthDateRange } from '@/lib/attendance-report-archive';
 import { buildAttendanceReportWorkbook, makeAttendanceReportFileName } from '@/lib/attendance-report-workbook';
 import type { HrLeaveRequest } from '@/lib/attendance-report-excel';
-import { approveDeviceRequest, cleanupMonthlyCheckins, getAttendanceArchiveDownload, rejectDeviceRequest, resetAllStaffAccess, resetEmployeeAccess } from './actions';
+import { approveDeviceRequest, cleanupCheckinsInRange, getAttendanceArchiveDownload, rejectDeviceRequest, resetAllStaffAccess, resetEmployeeAccess } from './actions';
 
 type Employee = { emp_id: string; name: string; role: string; active: boolean; branch: string | null; device_id: string | null };
 type Checkin = {
@@ -53,6 +53,12 @@ const C = {
 type View = 'daily' | 'weekly' | 'monthly';
 type TypeFilter = 'all' | 'in' | 'out' | 'offsite';
 
+function monthLastDateInput(monthStr: string) {
+  const [year, month] = monthStr.split('-').map(Number);
+  const lastDay = new Date(year, month, 0).getDate();
+  return `${monthStr}-${String(lastDay).padStart(2, '0')}`;
+}
+
 export default function AdminClient({
   adminName, monthStr, employees, checkins, settings, deviceRequests, branchNames, leaveRequests,
 }: {
@@ -75,10 +81,17 @@ export default function AdminClient({
   const [devReqs, setDevReqs] = useState(deviceRequests);
   const [isPending, startTransition] = useTransition();
   const [liveNotice, setLiveNotice] = useState<string | null>(null);
+  const [cleanupOpen, setCleanupOpen] = useState(false);
+  const [cleanupFrom, setCleanupFrom] = useState(`${monthStr}-01`);
+  const [cleanupTo, setCleanupTo] = useState(() => monthLastDateInput(monthStr));
   const router = useRouter();
 
   // sync state when server props change (after router.refresh())
   useEffect(() => { setDevReqs(deviceRequests); }, [deviceRequests]);
+  useEffect(() => {
+    setCleanupFrom(`${monthStr}-01`);
+    setCleanupTo(monthLastDateInput(monthStr));
+  }, [monthStr]);
 
   function manualRefresh() {
     setLiveNotice('กำลังรีเฟรชข้อมูล...');
@@ -124,17 +137,26 @@ export default function AdminClient({
   }
 
   function handleCleanupMonth() {
-    const typed = window.prompt(
-      `ลบข้อมูลเช็คอินและรูปของเดือน ${monthStr}?\n\nการลบนี้จะลบเฉพาะ checkins และรูปใน checkin-photos ของเดือนนี้ ไม่ลบพนักงาน/PIN/เครื่องที่ผูกไว้\n\nพิมพ์ ${monthStr} เพื่อยืนยัน`,
-    );
-    if (typed !== monthStr) {
-      if (typed !== null) setLiveNotice('ยกเลิก: พิมพ์เดือนไม่ตรง');
+    setCleanupOpen(true);
+  }
+
+  function confirmCleanupRange() {
+    const validation = validateSingleMonthDateRange(cleanupFrom, cleanupTo);
+    if (!validation.ok) {
+      setLiveNotice(validation.error);
+      setTimeout(() => setLiveNotice(null), 2600);
       return;
     }
+
     startTransition(async () => {
-      const res = await cleanupMonthlyCheckins(monthStr);
-      setLiveNotice(res.error ?? res.message ?? 'ลบข้อมูลสิ้นเดือนสำเร็จ');
-      if (!res.error) router.refresh();
+      setLiveNotice('????????? Excel ????????????...');
+      const res = await cleanupCheckinsInRange({ dateFrom: cleanupFrom, dateTo: cleanupTo });
+      const hasError = 'error' in res && Boolean(res.error);
+      setLiveNotice(hasError ? res.error ?? '???????????????????' : res.message ?? '????????????????');
+      if (!hasError) {
+        setCleanupOpen(false);
+        router.refresh();
+      }
     });
   }
 
@@ -559,12 +581,68 @@ export default function AdminClient({
           })}
         </div>
       </div>
+
+      {cleanupOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 120, display: 'grid', placeItems: 'center', padding: 18 }}>
+          <div style={{ width: '100%', maxWidth: 420, background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 18px 40px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.dark, marginBottom: 10 }}>ล้างข้อมูลตามช่วงวันที่</div>
+            <label style={modalLabelStyle}>
+              วันที่เริ่มต้น
+              <input type="date" value={cleanupFrom} onChange={(e) => setCleanupFrom(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: 4 }} />
+            </label>
+            <label style={{ ...modalLabelStyle, marginTop: 8 }}>
+              วันที่สิ้นสุด
+              <input type="date" value={cleanupTo} onChange={(e) => setCleanupTo(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: 4 }} />
+            </label>
+            <div style={{ fontSize: 11, color: '#a32d2d', marginTop: 10, lineHeight: 1.5 }}>
+              ระบบจะเก็บไฟล์ Excel ก่อนทุกครั้ง ถ้าเก็บไฟล์ไม่สำเร็จจะไม่ลบข้อมูล
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 14 }}>
+              <button type="button" onClick={() => setCleanupOpen(false)} disabled={isPending} style={secondaryButtonStyle}>
+                ยกเลิก
+              </button>
+              <button type="button" onClick={confirmCleanupRange} disabled={isPending} style={dangerButtonStyle}>
+                {isPending ? 'กำลังทำงาน...' : 'เก็บ Excel แล้วลบ'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
 
 const inputStyle: React.CSSProperties = {
   background: '#f4f2ec', border: '0.5px solid rgba(0,0,0,0.08)', borderRadius: 10, padding: '8px 10px', fontSize: 12, color: '#0e0e10', outline: 'none', minWidth: 0,
+};
+
+const modalLabelStyle: React.CSSProperties = {
+  display: 'block',
+  fontSize: 12,
+  fontWeight: 700,
+  color: '#0e0e10',
+};
+
+const secondaryButtonStyle: React.CSSProperties = {
+  background: '#f4f2ec',
+  color: '#0e0e10',
+  border: '0.5px solid rgba(0,0,0,0.12)',
+  borderRadius: 12,
+  padding: 11,
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: 'pointer',
+};
+
+const dangerButtonStyle: React.CSSProperties = {
+  background: '#a32d2d',
+  color: '#fff',
+  border: 'none',
+  borderRadius: 12,
+  padding: 11,
+  fontSize: 13,
+  fontWeight: 800,
+  cursor: 'pointer',
 };
 
 function KpiCard({ label, value, sub, bg, textCol }: { label: string; value: number | string; sub?: string; bg: string; textCol: string }) {
