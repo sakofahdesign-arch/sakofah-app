@@ -88,10 +88,6 @@ export default function AdminClient({
 
   // sync state when server props change (after router.refresh())
   useEffect(() => { setDevReqs(deviceRequests); }, [deviceRequests]);
-  useEffect(() => {
-    setCleanupFrom(`${monthStr}-01`);
-    setCleanupTo(monthLastDateInput(monthStr));
-  }, [monthStr]);
 
   function manualRefresh() {
     setLiveNotice('กำลังรีเฟรชข้อมูล...');
@@ -137,6 +133,8 @@ export default function AdminClient({
   }
 
   function handleCleanupMonth() {
+    setCleanupFrom(`${monthStr}-01`);
+    setCleanupTo(monthLastDateInput(monthStr));
     setCleanupOpen(true);
   }
 
@@ -681,9 +679,6 @@ function Legend({ color, label }: { color: string; label: string }) {
   );
 }
 
-function typeLabel(t: string) {
-  return t === 'in' ? 'เช็คอิน' : t === 'out' ? 'เช็คเอาท์' : t === 'offsite_in' ? 'นอกสถานที่ (เข้า)' : 'นอกสถานที่ (ออก)';
-}
 
 function typeInfo(t: string) {
   if (t === 'in') return { label: 'เข้า', icon: 'login-2', bg: '#d6f26b', color: '#0e0e10' };
