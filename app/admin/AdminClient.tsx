@@ -582,15 +582,19 @@ export default function AdminClient({
 
       {cleanupOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 120, display: 'grid', placeItems: 'center', padding: 16, boxSizing: 'border-box', overflowY: 'auto' }}>
-          <div style={{ width: '100%', maxWidth: 420, boxSizing: 'border-box', background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 18px 40px rgba(0,0,0,0.25)' }}>
+          <div style={{ width: '100%', maxWidth: 420, boxSizing: 'border-box', overflowX: 'hidden', background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 18px 40px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.dark, marginBottom: 10 }}>ล้างข้อมูลตามช่วงวันที่</div>
             <label style={modalLabelStyle}>
               วันที่เริ่มต้น
-              <input type="date" value={cleanupFrom} onChange={(e) => setCleanupFrom(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: 4 }} />
+              <div style={modalDateFieldStyle}>
+                <input type="date" value={cleanupFrom} onChange={(e) => setCleanupFrom(e.target.value)} style={modalDateInputStyle} />
+              </div>
             </label>
             <label style={{ ...modalLabelStyle, marginTop: 8 }}>
               วันที่สิ้นสุด
-              <input type="date" value={cleanupTo} onChange={(e) => setCleanupTo(e.target.value)} style={{ ...inputStyle, width: '100%', marginTop: 4 }} />
+              <div style={modalDateFieldStyle}>
+                <input type="date" value={cleanupTo} onChange={(e) => setCleanupTo(e.target.value)} style={modalDateInputStyle} />
+              </div>
             </label>
             <div style={{ fontSize: 11, color: '#a32d2d', marginTop: 10, lineHeight: 1.5 }}>
               ระบบจะเก็บไฟล์ Excel ก่อนทุกครั้ง ถ้าเก็บไฟล์ไม่สำเร็จจะไม่ลบข้อมูล
@@ -619,6 +623,39 @@ const modalLabelStyle: React.CSSProperties = {
   fontSize: 12,
   fontWeight: 700,
   color: '#0e0e10',
+};
+
+const modalDateFieldStyle: React.CSSProperties = {
+  width: '100%',
+  maxWidth: '100%',
+  boxSizing: 'border-box',
+  overflow: 'hidden',
+  background: '#f4f2ec',
+  border: '0.5px solid rgba(0,0,0,0.08)',
+  borderRadius: 10,
+  padding: '8px 10px',
+  marginTop: 4,
+};
+
+const modalDateInputStyle: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  maxWidth: '100%',
+  minWidth: 0,
+  minInlineSize: 0,
+  boxSizing: 'border-box',
+  WebkitAppearance: 'none',
+  appearance: 'none',
+  background: 'transparent',
+  border: 'none',
+  borderRadius: 0,
+  color: '#0e0e10',
+  fontSize: 12,
+  fontWeight: 700,
+  lineHeight: 1.4,
+  margin: 0,
+  outline: 'none',
+  padding: 0,
 };
 
 const secondaryButtonStyle: React.CSSProperties = {
