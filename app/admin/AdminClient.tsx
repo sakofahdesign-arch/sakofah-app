@@ -581,8 +581,8 @@ export default function AdminClient({
       </div>
 
       {cleanupOpen && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 120, display: 'grid', placeItems: 'center', padding: 18 }}>
-          <div style={{ width: '100%', maxWidth: 420, background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 18px 40px rgba(0,0,0,0.25)' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 120, display: 'grid', placeItems: 'center', padding: 16, boxSizing: 'border-box', overflowY: 'auto' }}>
+          <div style={{ width: '100%', maxWidth: 420, boxSizing: 'border-box', background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 18px 40px rgba(0,0,0,0.25)' }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.dark, marginBottom: 10 }}>ล้างข้อมูลตามช่วงวันที่</div>
             <label style={modalLabelStyle}>
               วันที่เริ่มต้น
@@ -595,7 +595,7 @@ export default function AdminClient({
             <div style={{ fontSize: 11, color: '#a32d2d', marginTop: 10, lineHeight: 1.5 }}>
               ระบบจะเก็บไฟล์ Excel ก่อนทุกครั้ง ถ้าเก็บไฟล์ไม่สำเร็จจะไม่ลบข้อมูล
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 14 }}>
               <button type="button" onClick={() => setCleanupOpen(false)} disabled={isPending} style={secondaryButtonStyle}>
                 ยกเลิก
               </button>
@@ -611,7 +611,7 @@ export default function AdminClient({
 }
 
 const inputStyle: React.CSSProperties = {
-  background: '#f4f2ec', border: '0.5px solid rgba(0,0,0,0.08)', borderRadius: 10, padding: '8px 10px', fontSize: 12, color: '#0e0e10', outline: 'none', minWidth: 0,
+  background: '#f4f2ec', border: '0.5px solid rgba(0,0,0,0.08)', borderRadius: 10, padding: '8px 10px', fontSize: 12, color: '#0e0e10', outline: 'none', minWidth: 0, boxSizing: 'border-box',
 };
 
 const modalLabelStyle: React.CSSProperties = {
@@ -629,6 +629,10 @@ const secondaryButtonStyle: React.CSSProperties = {
   padding: 11,
   fontSize: 13,
   fontWeight: 700,
+  lineHeight: 1.25,
+  minWidth: 0,
+  boxSizing: 'border-box',
+  whiteSpace: 'normal',
   cursor: 'pointer',
 };
 
@@ -640,6 +644,10 @@ const dangerButtonStyle: React.CSSProperties = {
   padding: 11,
   fontSize: 13,
   fontWeight: 800,
+  lineHeight: 1.25,
+  minWidth: 0,
+  boxSizing: 'border-box',
+  whiteSpace: 'normal',
   cursor: 'pointer',
 };
 
