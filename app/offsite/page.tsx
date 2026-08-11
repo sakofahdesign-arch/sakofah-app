@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { submitOffsite } from './actions';
 import { getOrCreateDeviceId } from '@/lib/device';
+import { checkinDialogMessage, checkinDialogTitle, formatTimingMs } from '@/lib/checkin-ui';
+import { OFFSITE_PHOTO_QUALITY, fitImageDimensions } from '@/lib/offsite-photo';
 
 // in-app browser (LINE, FB, IG ฯลฯ) มักบล็อก getUserMedia → ต้องใช้กล้องเนทีฟผ่าน file input
 function isInAppBrowser(): boolean {
@@ -36,6 +38,7 @@ function OffsiteInner() {
   const [direction, setDirection] = useState<'in' | 'out'>('in');
   const [err, setErr] = useState<string | null>(null);
   const [camFallback, setCamFallback] = useState(false);
+  const [successDialog, setSuccessDialog] = useState<{ type: 'offsite_in' | 'offsite_out'; timing: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -124,8 +127,7 @@ function OffsiteInner() {
       return;
     }
     const c = canvasRef.current;
-    const w = 800; // ลดจาก 1000 → ประหยัด storage
-    const h = Math.round((srcH / srcW) * w) || 600;
+    const { width: w, height: h } = fitImageDimensions(srcW, srcH);
     c.width = w; c.height = h;
     const ctx = c.getContext('2d')!;
 
@@ -168,7 +170,7 @@ function OffsiteInner() {
         setPhoto(b);
         setPhotoUrl(URL.createObjectURL(b));
       }
-    }, 'image/jpeg', 0.7); // ลดจาก 0.85 → ขนาดไฟล์เล็กลง ~40%
+    }, 'image/jpeg', OFFSITE_PHOTO_QUALITY);
   }
 
   function takePhoto() {
@@ -214,12 +216,17 @@ function OffsiteInner() {
     fd.append('location', location);
     fd.append('deviceId', getOrCreateDeviceId());
 
+    const startedAt = performance.now();
     startTransition(async () => {
       const res = await submitOffsite(fd);
       if (res?.error === 'DEVICE_NOT_BOUND') router.replace('/account/device/bind');
       else if (res?.error === 'DEVICE_MISMATCH') router.replace('/account/device');
       else if (res?.error) setErr(res.error);
-      else router.push('/checkin');
+      else if (res.type) {
+        setErr(null);
+        setSuccessDialog({ type: res.type, timing: formatTimingMs(performance.now() - startedAt) });
+        setTimeout(() => router.push('/checkin'), 650);
+      }
     });
   }
 
@@ -364,6 +371,19 @@ function OffsiteInner() {
       <div style={{ marginTop: 14, fontSize: 10, color: '#5c5c60', textAlign: 'center' }}>
         บันทึกอัตโนมัติ ไม่ต้องรอการอนุมัติ
       </div>
+      {successDialog && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 90, display: 'grid', placeItems: 'center', padding: 18 }}>
+          <div style={{ width: '100%', maxWidth: 320, background: '#fff', borderRadius: 18, padding: 20, textAlign: 'center', boxShadow: '0 18px 40px rgba(0,0,0,0.25)' }}>
+            <i className="ti ti-circle-check-filled" style={{ fontSize: 54, color: '#5dcaa5' }} aria-hidden></i>
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8 }}>{checkinDialogTitle(successDialog.type)}</div>
+            <div style={{ fontSize: 16, fontWeight: 700, marginTop: 4 }}>{checkinDialogMessage()}</div>
+            <div style={{ fontSize: 11, color: '#5c5c60', marginTop: 6 }}>{successDialog.timing}</div>
+            <button type="button" onClick={() => router.push('/checkin')} style={{ marginTop: 16, width: '100%', border: 'none', borderRadius: 12, padding: 12, background: '#0e0e10', color: '#d6f26b', fontWeight: 800, cursor: 'pointer' }}>
+              ตกลง
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
