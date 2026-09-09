@@ -33,7 +33,7 @@ export async function login(formData: FormData) {
 
   const { data: emp } = await supabase
     .from('employees')
-    .select('role, active, device_id')
+    .select('role, active, pin_changed, device_id')
     .eq('emp_id', empId)
     .single();
 
@@ -51,5 +51,8 @@ export async function login(formData: FormData) {
     }
   }
 
-  redirect('/');
+  if (emp.role === 'admin') redirect('/admin');
+  if (!emp.pin_changed) redirect('/account/pin');
+  if (!emp.device_id) redirect('/account/device/bind');
+  redirect('/checkin');
 }

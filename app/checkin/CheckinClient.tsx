@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { submitCheckin, signOut } from './actions';
+import { submitCheckin } from './actions';
+import { createClient } from '@/lib/supabase/client';
 import { getOrCreateDeviceId } from '@/lib/device';
 import { getDeviceAccessNotice, resolveDeviceAccess } from '@/lib/device-access';
 import { checkinDialogMessage, checkinDialogTitle, formatTimingMs } from '@/lib/checkin-ui';
@@ -202,6 +203,15 @@ export default function CheckinClient({ empName, empId, role, boundDeviceId, tod
     });
   }
 
+  function signOutFast() {
+    setMenuOpen(false);
+    router.replace('/login?clearDevice=1');
+    startTransition(async () => {
+      await createClient().auth.signOut();
+      router.refresh();
+    });
+  }
+
   const timeStr = now ? formatBangkokTime(now) : '--:--';
   const dateStr = now ? now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', timeZone: BANGKOK_TIME_ZONE }) : '';
   const workDays = settings?.work_days === 'MTWTF' ? 'จ–ศ' : 'ทุกวัน';
@@ -260,8 +270,8 @@ export default function CheckinClient({ empName, empId, role, boundDeviceId, tod
               <MenuItem icon="key" label="เปลี่ยน PIN" href="/account/pin" />
               <MenuItem icon="device-mobile-cog" label="ขอเปลี่ยนเครื่อง" href="/account/device" />
               <div style={{ height: 1, background: '#2a2a2d', margin: '4px 6px' }} />
-              <form action={signOut}>
-                <button type="submit" style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', background: 'transparent', border: 'none', color: '#ff7a7a', padding: '10px 12px', fontSize: 13, borderRadius: 10, cursor: 'pointer', textAlign: 'left' }}>
+              <form>
+                <button type="button" onClick={signOutFast} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', background: 'transparent', border: 'none', color: '#ff7a7a', padding: '10px 12px', fontSize: 13, borderRadius: 10, cursor: 'pointer', textAlign: 'left' }}>
                   <i className="ti ti-logout" style={{ fontSize: 16 }} aria-hidden></i>ออกจากระบบ
                 </button>
               </form>
