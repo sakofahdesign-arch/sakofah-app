@@ -4,6 +4,7 @@ import { useState, useEffect, useTransition, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { changePin } from './actions';
 
 export default function ChangePinPage() {
   const [oldPin, setOldPin] = useState('');
@@ -43,41 +44,8 @@ export default function ChangePinPage() {
 
     setSubmitting(true);
     startTransition(async () => {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const email = user?.email;
-
-      if (!email) {
-        setErr('ไม่ได้เข้าสู่ระบบ');
-        setSubmitting(false);
-        return;
-      }
-
-      const { error: signinErr } = await supabase.auth.signInWithPassword({
-        email,
-        password: oldPin,
-      });
-      if (signinErr) {
-        setErr('PIN เดิมไม่ถูกต้อง');
-        setSubmitting(false);
-        return;
-      }
-
-      const { error: updateErr } = await supabase.auth.updateUser({ password: newPin });
-      if (updateErr) {
-        setErr(updateErr.message);
-        setSubmitting(false);
-        return;
-      }
-
-      const { error: markErr } = await supabase.rpc('mark_pin_changed');
-      if (markErr) {
-        setErr(markErr.message);
-        setSubmitting(false);
-        return;
-      }
+      const result = await changePin({ oldPin, newPin });
+      if (result?.error) { setErr(result.error); setSubmitting(false); return; }
 
       setOk(true);
       setTimeout(() => router.replace(forced ? '/account/device/bind' : '/checkin'), 1200);
