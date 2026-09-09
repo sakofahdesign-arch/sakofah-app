@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -15,6 +15,12 @@ export default function ChangePinPage() {
   const [submitting, setSubmitting] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
+
+  useEffect(() => {
+    router.prefetch('/checkin');
+    router.prefetch('/account/device/bind');
+    router.prefetch('/logout');
+  }, [router]);
 
   // ตรวจว่ายังไม่เคยเปลี่ยน PIN → โหมดบังคับ (onboarding)
   useEffect(() => {
@@ -60,6 +66,15 @@ export default function ChangePinPage() {
     router.replace(forced ? '/logout' : '/checkin');
   }
 
+  function goBackToCheckin(event: MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.replace('/checkin');
+  }
+
   const submitLocked = submitting || pending || ok;
 
   return (
@@ -70,7 +85,7 @@ export default function ChangePinPage() {
           <span style={{ fontSize: 13, fontWeight: 500 }}>ขั้นตอนที่ 1 จาก 3</span>
         </div>
       ) : (
-        <Link href="/checkin" style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+        <Link href="/checkin" onClick={goBackToCheckin} style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
           <i className="ti ti-arrow-left" style={{ fontSize: 18 }} aria-hidden></i>
           <span style={{ fontSize: 13 }}>กลับ</span>
         </Link>

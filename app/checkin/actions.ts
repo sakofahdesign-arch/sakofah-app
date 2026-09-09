@@ -2,6 +2,7 @@
 
 import { createClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
 
 type CheckinInput = {
   type: 'in' | 'out';
@@ -142,4 +143,5 @@ export async function submitCheckin(input: CheckinInput) {
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
+  redirect('/login?clearDevice=1');
 }

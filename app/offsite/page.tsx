@@ -46,6 +46,10 @@ function OffsiteInner() {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
+  useEffect(() => {
+    router.prefetch('/checkin');
+  }, [router]);
+
   function getBangkokDayRange(date = new Date()) {
     const ymd = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Bangkok',
@@ -218,6 +222,15 @@ function OffsiteInner() {
     startCamera(facing);
   }
 
+  function goBackToCheckin(event?: React.MouseEvent<HTMLAnchorElement | HTMLButtonElement>) {
+    event?.preventDefault();
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.replace('/checkin');
+  }
+
   function submit() {
     if (deviceBlocked) {
       setErr(deviceNotice?.message ?? 'กำลังตรวจสอบเครื่องที่ใช้งาน');
@@ -265,7 +278,7 @@ function OffsiteInner() {
 
   return (
     <main style={{ minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 18 }}>
-      <Link href="/checkin" style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+      <Link href="/checkin" onClick={goBackToCheckin} style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
         <i className="ti ti-arrow-left" style={{ fontSize: 18 }} aria-hidden></i>
         <span style={{ fontSize: 13 }}>กลับ</span>
       </Link>
@@ -408,7 +421,7 @@ function OffsiteInner() {
             <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8 }}>{checkinDialogTitle(successDialog.type)}</div>
             <div style={{ fontSize: 16, fontWeight: 700, marginTop: 4 }}>{checkinDialogMessage()}</div>
             <div style={{ fontSize: 11, color: '#5c5c60', marginTop: 6 }}>{successDialog.timing}</div>
-            <button type="button" onClick={() => router.push('/checkin')} style={{ marginTop: 16, width: '100%', border: 'none', borderRadius: 12, padding: 12, background: '#0e0e10', color: '#d6f26b', fontWeight: 800, cursor: 'pointer' }}>
+            <button type="button" onClick={goBackToCheckin} style={{ marginTop: 16, width: '100%', border: 'none', borderRadius: 12, padding: 12, background: '#0e0e10', color: '#d6f26b', fontWeight: 800, cursor: 'pointer' }}>
               ตกลง
             </button>
           </div>

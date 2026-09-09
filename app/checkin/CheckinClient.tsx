@@ -92,6 +92,12 @@ export default function CheckinClient({ empName, empId, role, boundDeviceId, tod
   const holdStart = useRef<number>(0);
 
   useEffect(() => {
+    router.prefetch('/offsite');
+    router.prefetch('/account/pin');
+    router.prefetch('/account/device');
+  }, [router]);
+
+  useEffect(() => {
     setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);

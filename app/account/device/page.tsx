@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState, useTransition, type MouseEvent } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getOrCreateDeviceId, getDeviceLabel } from '@/lib/device';
 
@@ -12,11 +13,22 @@ export default function DeviceRequestPage() {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   useEffect(() => {
+    router.prefetch('/checkin');
     setDeviceId(getOrCreateDeviceId());
     setDeviceLabel(getDeviceLabel());
-  }, []);
+  }, [router]);
+
+  function goBackToCheckin(event: MouseEvent<HTMLAnchorElement>) {
+    event.preventDefault();
+    if (window.history.length > 1) {
+      router.back();
+      return;
+    }
+    router.replace('/checkin');
+  }
 
   function submit() {
     setErr(null);
@@ -43,7 +55,7 @@ export default function DeviceRequestPage() {
 
   return (
     <main style={{ minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 18 }}>
-      <Link href="/checkin" style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+      <Link href="/checkin" onClick={goBackToCheckin} style={{ textDecoration: 'none', color: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
         <i className="ti ti-arrow-left" style={{ fontSize: 18 }} aria-hidden></i>
         <span style={{ fontSize: 13 }}>กลับ</span>
       </Link>
@@ -58,7 +70,7 @@ export default function DeviceRequestPage() {
           <i className="ti ti-circle-check-filled" style={{ fontSize: 40 }} aria-hidden></i>
           <div style={{ fontSize: 16, fontWeight: 700, marginTop: 6 }}>ส่งคำขอเรียบร้อย</div>
           <div style={{ fontSize: 12, marginTop: 2 }}>ผู้ดูแลระบบ จะติดต่อกลับภายใน 24 ชม.</div>
-          <Link href="/checkin" style={{ display: 'inline-block', marginTop: 12, background: '#0e0e10', color: '#d6f26b', borderRadius: 10, padding: '8px 16px', fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>กลับหน้าหลัก</Link>
+          <Link href="/checkin" onClick={goBackToCheckin} style={{ display: 'inline-block', marginTop: 12, background: '#0e0e10', color: '#d6f26b', borderRadius: 10, padding: '8px 16px', fontSize: 12, textDecoration: 'none', fontWeight: 600 }}>กลับหน้าหลัก</Link>
         </div>
       ) : (
         <div style={{ background: '#0e0e10', borderRadius: 18, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
