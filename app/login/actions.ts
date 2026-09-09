@@ -52,7 +52,7 @@ export async function login(formData: FormData) {
   }
 
   if (emp.role === 'admin') redirect('/admin');
-  if (!emp.pin_changed) redirect('/account/pin');
+  if (!emp.pin_changed) redirect(`/account/pin?emp=${encodeURIComponent(empId)}`);
   if (!emp.device_id) redirect('/account/device/bind');
   redirect('/checkin');
 }

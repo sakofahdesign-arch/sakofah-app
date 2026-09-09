@@ -3,23 +3,42 @@
 import { createClient } from '@/lib/supabase/server';
 
 export async function changePin({
+  empId,
   oldPin,
   newPin,
 }: {
+  empId?: string;
   oldPin: string;
   newPin: string;
 }) {
   const supabase = await createClient();
-  const {
+  let {
     data: { user },
   } = await supabase.auth.getUser();
 
   if (!user?.email) {
+    const normalizedEmpId = empId?.trim().toLowerCase();
+    if (!normalizedEmpId) {
+      return { error: 'ไม่ได้เข้าสู่ระบบ' };
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: `${normalizedEmpId}@sakofah.local`,
+      password: oldPin,
+    });
+    if (error || !data.user?.email) {
+      return { error: 'PIN เดิมไม่ถูกต้อง' };
+    }
+    user = data.user;
+  }
+
+  const email = user.email;
+  if (!email) {
     return { error: 'ไม่ได้เข้าสู่ระบบ' };
   }
 
   const { error: signinErr } = await supabase.auth.signInWithPassword({
-    email: user.email,
+    email,
     password: oldPin,
   });
   if (signinErr) {
