@@ -205,7 +205,7 @@ export default function CheckinClient({ empName, empId, role, boundDeviceId, tod
 
   function signOutFast() {
     setMenuOpen(false);
-    router.replace('/login?clearDevice=1');
+    router.replace('/login');
     startTransition(async () => {
       await createClient().auth.signOut();
       router.refresh();

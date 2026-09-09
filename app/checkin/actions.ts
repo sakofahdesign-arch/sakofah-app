@@ -143,5 +143,5 @@ export async function submitCheckin(input: CheckinInput) {
 export async function signOut() {
   const supabase = await createClient();
   await supabase.auth.signOut();
-  redirect('/login?clearDevice=1');
+  redirect('/login');
 }
