@@ -212,6 +212,10 @@ export default function CheckinClient({ empName, empId, role, boundDeviceId, tod
     });
   }
 
+  function refreshPage() {
+    router.refresh();
+  }
+
   const timeStr = now ? formatBangkokTime(now) : '--:--';
   const dateStr = now ? now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric', timeZone: BANGKOK_TIME_ZONE }) : '';
   const workDays = settings?.work_days === 'MTWTF' ? 'จ–ศ' : 'ทุกวัน';
@@ -258,6 +262,9 @@ export default function CheckinClient({ empName, empId, role, boundDeviceId, tod
               <i className="ti ti-shield-check" style={{ fontSize: 12 }} aria-hidden></i>Admin
             </Link>
           )}
+          <button type="button" onClick={refreshPage} aria-label="รีเฟรช" title="รีเฟรช" style={{ width: 34, height: 34, borderRadius: '50%', background: '#0e0e10', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <i className="ti ti-refresh" style={{ fontSize: 16 }} aria-hidden></i>
+          </button>
           <button onClick={() => setMenuOpen((v) => !v)} style={{ width: 34, height: 34, borderRadius: '50%', background: '#0e0e10', color: '#fff', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <i className="ti ti-dots-vertical" style={{ fontSize: 16 }} aria-hidden></i>
           </button>

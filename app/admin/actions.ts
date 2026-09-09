@@ -20,6 +20,15 @@ import XLSX from 'xlsx-js-style';
 
 const DEFAULT_RESET_PIN = '123456';
 const CHECKIN_PHOTO_BUCKET = 'checkin-photos';
+const EMPLOYEE_ROLE_VALUES = new Set(['staff', 'admin']);
+
+type EmployeeUserInput = {
+  empId: string;
+  name: string;
+  role: string;
+  branch: string;
+  active: boolean;
+};
 
 function chunks<T>(items: T[], size = 10) {
   const out: T[][] = [];
@@ -106,6 +115,100 @@ function createAdminClient() {
   return createSupabaseAdminClient(url, serviceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+}
+
+function normalizeEmployeeInput(input: EmployeeUserInput) {
+  const empId = input.empId.trim().toUpperCase();
+  const name = input.name.trim();
+  const role = EMPLOYEE_ROLE_VALUES.has(input.role) ? input.role : 'staff';
+  const branch = input.branch.trim() || null;
+  return { empId, name, role, branch, active: Boolean(input.active) };
+}
+
+export async function createEmployeeUser(input: EmployeeUserInput) {
+  const supabase = await requireAdmin();
+  if (!supabase) return { error: 'ไม่มีสิทธิ์' };
+
+  const employee = normalizeEmployeeInput(input);
+  if (!employee.empId) return { error: 'กรุณากรอกรหัสพนักงาน' };
+  if (!/^[A-Z0-9_-]+$/.test(employee.empId)) return { error: 'รหัสพนักงานใช้ได้เฉพาะ A-Z, 0-9, _ และ -' };
+  if (!employee.name) return { error: 'กรุณากรอกชื่อ User' };
+
+  const admin = createAdminClient();
+  if (!admin) return { error: 'ยังไม่ได้ตั้งค่า SUPABASE_SERVICE_ROLE_KEY สำหรับจัดการ User' };
+
+  const { data: existing, error: existingErr } = await admin
+    .from('employees')
+    .select('emp_id')
+    .eq('emp_id', employee.empId)
+    .maybeSingle();
+  if (existingErr) return { error: existingErr.message };
+  if (existing) return { error: 'มีรหัสพนักงานนี้ในระบบแล้ว' };
+
+  const email = `${employee.empId.toLowerCase()}@sakofah.local`;
+  const { data: created, error: createErr } = await admin.auth.admin.createUser({
+    email,
+    password: DEFAULT_RESET_PIN,
+    email_confirm: true,
+    user_metadata: { emp_id: employee.empId, name: employee.name },
+  });
+  if (createErr || !created.user) return { error: createErr?.message ?? 'สร้าง Auth User ไม่สำเร็จ' };
+
+  const { error: insertErr } = await admin.from('employees').insert({
+    id: created.user.id,
+    emp_id: employee.empId,
+    name: employee.name,
+    role: employee.role,
+    branch: employee.branch,
+    active: employee.active,
+    pin_changed: false,
+    device_id: null,
+  });
+
+  if (insertErr) {
+    await admin.auth.admin.deleteUser(created.user.id);
+    return { error: insertErr.message };
+  }
+
+  revalidatePath('/admin');
+  return { ok: true, message: `เพิ่ม ${employee.name} แล้ว รหัสเริ่มต้นคือ ${DEFAULT_RESET_PIN}` };
+}
+
+export async function updateEmployeeUser(input: EmployeeUserInput) {
+  const supabase = await requireAdmin();
+  if (!supabase) return { error: 'ไม่มีสิทธิ์' };
+
+  const employee = normalizeEmployeeInput(input);
+  if (!employee.empId) return { error: 'ไม่พบรหัสพนักงาน' };
+  if (!employee.name) return { error: 'กรุณากรอกชื่อ User' };
+
+  const admin = createAdminClient();
+  if (!admin) return { error: 'ยังไม่ได้ตั้งค่า SUPABASE_SERVICE_ROLE_KEY สำหรับจัดการ User' };
+
+  const { data: existing, error: findErr } = await admin
+    .from('employees')
+    .select('id, emp_id')
+    .eq('emp_id', employee.empId)
+    .single();
+  if (findErr || !existing) return { error: findErr?.message ?? 'ไม่พบ User' };
+
+  const { error: updateErr } = await admin
+    .from('employees')
+    .update({
+      name: employee.name,
+      role: employee.role,
+      branch: employee.branch,
+      active: employee.active,
+    })
+    .eq('emp_id', employee.empId);
+  if (updateErr) return { error: updateErr.message };
+
+  await admin.auth.admin.updateUserById(existing.id, {
+    user_metadata: { emp_id: employee.empId, name: employee.name },
+  });
+
+  revalidatePath('/admin');
+  return { ok: true, message: `บันทึก ${employee.name} แล้ว` };
 }
 
 async function loadArchiveReportData(

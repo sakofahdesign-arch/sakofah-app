@@ -7,9 +7,11 @@ import XLSX from 'xlsx-js-style';
 import { decideMonthExport, validateSingleMonthDateRange } from '@/lib/attendance-report-archive';
 import { buildAttendanceReportWorkbook, makeAttendanceReportFileName } from '@/lib/attendance-report-workbook';
 import type { HrLeaveRequest } from '@/lib/attendance-report-excel';
-import { approveDeviceRequest, cleanupCheckinsInRange, getAttendanceArchiveDownload, rejectDeviceRequest, resetAllStaffAccess, resetEmployeeAccess } from './actions';
+import { approveDeviceRequest, cleanupCheckinsInRange, createEmployeeUser, getAttendanceArchiveDownload, rejectDeviceRequest, resetAllStaffAccess, resetEmployeeAccess, updateEmployeeUser } from './actions';
 
 type Employee = { emp_id: string; name: string; role: string; active: boolean; branch: string | null; device_id: string | null };
+type EmployeeFormMode = 'create' | 'edit';
+type EmployeeFormState = { empId: string; name: string; role: 'staff' | 'admin'; branch: string; active: boolean };
 type Checkin = {
   id: string;
   emp_id: string;
@@ -49,6 +51,7 @@ const C = {
   mintDeep: '#5dcaa5',
   mint: '#c5f1de',
 };
+const emptyEmployeeForm: EmployeeFormState = { empId: '', name: '', role: 'staff', branch: '', active: true };
 
 type View = 'daily' | 'weekly' | 'monthly';
 type TypeFilter = 'all' | 'in' | 'out' | 'offsite';
@@ -84,6 +87,9 @@ export default function AdminClient({
   const [cleanupOpen, setCleanupOpen] = useState(false);
   const [cleanupFrom, setCleanupFrom] = useState(`${monthStr}-01`);
   const [cleanupTo, setCleanupTo] = useState(() => monthLastDateInput(monthStr));
+  const [employeeModalOpen, setEmployeeModalOpen] = useState(false);
+  const [employeeModalMode, setEmployeeModalMode] = useState<EmployeeFormMode>('create');
+  const [employeeForm, setEmployeeForm] = useState<EmployeeFormState>(emptyEmployeeForm);
   const router = useRouter();
 
   // sync state when server props change (after router.refresh())
@@ -129,6 +135,50 @@ export default function AdminClient({
       const res = await resetAllStaffAccess();
       setLiveNotice(res.error ?? res.message ?? 'รีเซ็ตพนักงานทุกคนสำเร็จ');
       if (!res.error) router.refresh();
+    });
+  }
+
+  function openCreateEmployee() {
+    setEmployeeModalMode('create');
+    setEmployeeForm(emptyEmployeeForm);
+    setEmployeeModalOpen(true);
+  }
+
+  function openEditEmployee(employee: Employee) {
+    setEmployeeModalMode('edit');
+    setEmployeeForm({
+      empId: employee.emp_id,
+      name: employee.name,
+      role: employee.role === 'admin' ? 'admin' : 'staff',
+      branch: employee.branch ?? '',
+      active: employee.active,
+    });
+    setEmployeeModalOpen(true);
+  }
+
+  function setEmployeeField<K extends keyof EmployeeFormState>(key: K, value: EmployeeFormState[K]) {
+    setEmployeeForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function handleSaveEmployee() {
+    if (!employeeForm.empId.trim()) {
+      setLiveNotice('กรุณากรอกรหัสพนักงาน');
+      return;
+    }
+    if (!employeeForm.name.trim()) {
+      setLiveNotice('กรุณากรอกชื่อ User');
+      return;
+    }
+
+    startTransition(async () => {
+      const res = employeeModalMode === 'create'
+        ? await createEmployeeUser(employeeForm)
+        : await updateEmployeeUser(employeeForm);
+      setLiveNotice(res.error ?? res.message ?? 'บันทึก User สำเร็จ');
+      if (!res.error) {
+        setEmployeeModalOpen(false);
+        router.refresh();
+      }
     });
   }
 
@@ -539,16 +589,21 @@ export default function AdminClient({
               style={{ ...inputStyle, width: 220, marginTop: 10 }}
             />
           </div>
-          <button onClick={handleResetAllStaffAccess} disabled={isPending} style={{ background: '#fff', color: '#a32d2d', border: '0.5px solid rgba(163,45,45,0.25)', borderRadius: 10, padding: '7px 11px', fontSize: 12, fontWeight: 700, cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.55 : 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-            <i className="ti ti-refresh-alert" style={{ fontSize: 13 }} aria-hidden></i>Reset
-          </button>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            <button type="button" onClick={openCreateEmployee} disabled={isPending} style={{ background: C.dark, color: C.lime, border: 'none', borderRadius: 10, padding: '7px 11px', fontSize: 12, fontWeight: 700, cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.55 : 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <i className="ti ti-user-plus" style={{ fontSize: 13 }} aria-hidden></i>เพิ่ม User
+            </button>
+            <button onClick={handleResetAllStaffAccess} disabled={isPending} style={{ background: '#fff', color: '#a32d2d', border: '0.5px solid rgba(163,45,45,0.25)', borderRadius: 10, padding: '7px 11px', fontSize: 12, fontWeight: 700, cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.55 : 1, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              <i className="ti ti-refresh-alert" style={{ fontSize: 13 }} aria-hidden></i>Reset
+            </button>
+          </div>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
           {employeeRows.map((e) => {
             const empIns = checkins.filter((c) => c.emp_id === e.emp_id && c.type === 'in');
             const empLate = empIns.filter((c) => { const d = new Date(c.ts); return d.getHours() * 60 + d.getMinutes() > cutoffMin; }).length;
             return (
-              <div key={e.emp_id} style={{ background: '#f4f2ec', borderRadius: 12, padding: '10px 12px', display: 'grid', gridTemplateColumns: '36px 1fr auto', alignItems: 'center', gap: 10 }}>
+              <div key={e.emp_id} style={{ background: '#f4f2ec', borderRadius: 12, padding: '10px 12px', display: 'grid', gridTemplateColumns: '36px 1fr auto auto', alignItems: 'center', gap: 10 }}>
                 <div style={{ width: 36, height: 36, borderRadius: 10, background: e.role === 'admin' ? C.dark : C.lime, color: e.role === 'admin' ? C.lime : C.dark, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 600 }}>
                   {e.name.slice(0, 2)}
                 </div>
@@ -559,6 +614,21 @@ export default function AdminClient({
                     {empLate > 0 && <span style={{ color: '#a32d2d' }}> · สาย {empLate}</span>}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => openEditEmployee(e)}
+                  disabled={isPending}
+                  title="แก้ไข User"
+                  style={{
+                    width: 34, height: 34, borderRadius: 10,
+                    border: '0.5px solid rgba(0,0,0,0.12)',
+                    background: '#fff', color: C.dark,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: isPending ? 'not-allowed' : 'pointer', opacity: isPending ? 0.5 : 1,
+                  }}
+                >
+                  <i className="ti ti-pencil" style={{ fontSize: 17 }} aria-hidden></i>
+                </button>
                 <button
                   type="button"
                   onClick={() => handleResetEmployeeAccess(e.emp_id, e.name)}
@@ -579,6 +649,90 @@ export default function AdminClient({
           })}
         </div>
       </div>
+
+      {employeeModalOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 120, display: 'grid', placeItems: 'center', padding: 16, boxSizing: 'border-box', overflowY: 'auto' }}>
+          <div style={{ width: '100%', maxWidth: 420, boxSizing: 'border-box', overflowX: 'hidden', background: '#fff', borderRadius: 16, padding: 16, boxShadow: '0 18px 40px rgba(0,0,0,0.25)' }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: C.dark, marginBottom: 10 }}>
+              {employeeModalMode === 'create' ? 'เพิ่ม User' : 'แก้ไข User'}
+            </div>
+            <label style={modalLabelStyle}>
+              รหัสพนักงาน
+              <input
+                value={employeeForm.empId}
+                onChange={(e) => setEmployeeField('empId', e.target.value)}
+                disabled={employeeModalMode === 'edit' || isPending}
+                placeholder="เช่น 690002"
+                style={{ ...inputStyle, width: '100%', marginTop: 4, textTransform: 'uppercase', opacity: employeeModalMode === 'edit' ? 0.65 : 1 }}
+              />
+            </label>
+            <label style={{ ...modalLabelStyle, marginTop: 8 }}>
+              ชื่อ User
+              <input
+                value={employeeForm.name}
+                onChange={(e) => setEmployeeField('name', e.target.value)}
+                disabled={isPending}
+                placeholder="ชื่อพนักงาน"
+                style={{ ...inputStyle, width: '100%', marginTop: 4 }}
+              />
+            </label>
+            <label style={{ ...modalLabelStyle, marginTop: 8 }}>
+              สิทธิ์
+              <select
+                value={employeeForm.role}
+                onChange={(e) => setEmployeeField('role', e.target.value as EmployeeFormState['role'])}
+                disabled={isPending}
+                style={{ ...inputStyle, width: '100%', marginTop: 4 }}
+              >
+                <option value="staff">staff</option>
+                <option value="admin">admin</option>
+              </select>
+            </label>
+            <label style={{ ...modalLabelStyle, marginTop: 8 }}>
+              สาขา
+              <select
+                value={employeeForm.branch}
+                onChange={(e) => setEmployeeField('branch', e.target.value)}
+                disabled={isPending}
+                style={{ ...inputStyle, width: '100%', marginTop: 4 }}
+              >
+                <option value="">ไม่ระบุสาขา</option>
+                {branches.map((branch) => (
+                  <option key={branch} value={branch}>{branch}</option>
+                ))}
+              </select>
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, fontSize: 12, fontWeight: 700, color: C.dark }}>
+              <input
+                type="checkbox"
+                checked={employeeForm.active}
+                onChange={(e) => setEmployeeField('active', e.target.checked)}
+                disabled={isPending}
+                style={{ width: 16, height: 16, accentColor: C.dark }}
+              />
+              เปิดใช้งาน
+            </label>
+            {employeeModalMode === 'create' && (
+              <div style={{ fontSize: 11, color: '#5c5c60', marginTop: 10, lineHeight: 1.5 }}>
+                User ใหม่จะใช้รหัสเริ่มต้น 123456 และถูกบังคับให้เปลี่ยน PIN ก่อนผูกเครื่องตาม flow เดิม
+              </div>
+            )}
+            {employeeModalMode === 'edit' && (
+              <div style={{ fontSize: 11, color: '#5c5c60', marginTop: 10, lineHeight: 1.5 }}>
+                การแก้ไขนี้ไม่เปลี่ยนรหัสผ่าน ไม่รีเซ็ต PIN และไม่แตะเครื่องที่ผูกไว้
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 8, marginTop: 14 }}>
+              <button type="button" onClick={() => setEmployeeModalOpen(false)} disabled={isPending} style={secondaryButtonStyle}>
+                ยกเลิก
+              </button>
+              <button type="button" onClick={handleSaveEmployee} disabled={isPending} style={{ ...secondaryButtonStyle, background: C.dark, color: C.lime, border: 'none' }}>
+                {isPending ? 'กำลังบันทึก...' : 'บันทึก'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {cleanupOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 120, display: 'grid', placeItems: 'center', padding: 16, boxSizing: 'border-box', overflowY: 'auto' }}>
