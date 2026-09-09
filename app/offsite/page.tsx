@@ -234,15 +234,19 @@ function OffsiteInner() {
     fd.append('location', location);
     fd.append('deviceId', getOrCreateDeviceId());
 
-    const startedAt = performance.now();
+    const optimisticType = direction === 'in' ? 'offsite_in' : 'offsite_out';
+    setErr(null);
+    setSuccessDialog({ type: optimisticType, timing: formatTimingMs(0) });
     startTransition(async () => {
       const res = await submitOffsite(fd);
       if (res?.error === 'DEVICE_NOT_BOUND') router.replace('/account/device/bind');
       else if (res?.error === 'DEVICE_MISMATCH') router.replace('/account/device');
-      else if (res?.error) setErr(res.error);
+      else if (res?.error) {
+        setSuccessDialog(null);
+        setErr(res.error);
+      }
       else if (res.type) {
         setErr(null);
-        setSuccessDialog({ type: res.type, timing: formatTimingMs(performance.now() - startedAt) });
         setTimeout(() => router.push('/checkin'), 650);
       }
     });

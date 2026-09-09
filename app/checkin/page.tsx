@@ -44,18 +44,27 @@ export default async function CheckinPage() {
   }
 
   const today = getBangkokDayRange();
-  const { data: todayCheckins } = await supabase
+  const todayCheckinsQuery = supabase
     .from('checkins')
     .select('type, ts')
     .eq('emp_id', emp.emp_id)
     .gte('ts', today.start)
     .lte('ts', today.end)
     .order('ts');
-
-  const { data: settings } = await supabase
+  const settingsQuery = supabase
     .from('settings')
     .select('*')
     .single();
+  const branchQuery = emp.branch
+    ? supabase
+        .from('branches')
+        .select('name, lat, lng, radius_m')
+        .eq('name', emp.branch)
+        .maybeSingle()
+    : Promise.resolve({ data: null });
+
+  const [{ data: todayCheckins }, { data: settings }, { data: branch }] =
+    await Promise.all([todayCheckinsQuery, settingsQuery, branchQuery]);
 
   let checkinLocation = settings
     ? {
@@ -66,21 +75,13 @@ export default async function CheckinPage() {
       }
     : null;
 
-  if (emp.branch) {
-    const { data: branch } = await supabase
-      .from('branches')
-      .select('name, lat, lng, radius_m')
-      .eq('name', emp.branch)
-      .maybeSingle();
-
-    if (branch) {
-      checkinLocation = {
-        label: branch.name,
-        lat: branch.lat,
-        lng: branch.lng,
-        radius_m: branch.radius_m,
-      };
-    }
+  if (branch) {
+    checkinLocation = {
+      label: branch.name,
+      lat: branch.lat,
+      lng: branch.lng,
+      radius_m: branch.radius_m,
+    };
   }
 
   return (

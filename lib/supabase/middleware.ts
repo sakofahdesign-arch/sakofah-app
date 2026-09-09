@@ -3,6 +3,22 @@ import { NextResponse, type NextRequest } from 'next/server';
 
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
+  const path = request.nextUrl.pathname;
+  const isLoginPage = path.startsWith('/login');
+  const isSessionResetPage = path.startsWith('/external-login');
+  const isLogoutPage = path.startsWith('/logout');
+
+  if (request.method !== 'GET' || isLoginPage || isSessionResetPage || isLogoutPage) {
+    return response;
+  }
+
+  const hasSupabaseAuthCookie = request.cookies
+    .getAll()
+    .some((cookie) => cookie.name.startsWith('sb-') && cookie.name.includes('auth-token'));
+
+  if (!hasSupabaseAuthCookie) {
+    return NextResponse.redirect(new URL('/login', request.url));
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,15 +45,8 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
-  const isLoginPage = path.startsWith('/login');
-  const isSessionResetPage = path.startsWith('/external-login');
-
-  if (!user && !isLoginPage && !isSessionResetPage) {
+  if (!user) {
     return NextResponse.redirect(new URL('/login', request.url));
-  }
-  if (user && isLoginPage) {
-    return NextResponse.redirect(new URL('/', request.url));
   }
 
   return response;

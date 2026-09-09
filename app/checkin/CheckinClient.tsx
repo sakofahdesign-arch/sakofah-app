@@ -171,7 +171,8 @@ export default function CheckinClient({ empName, empId, role, boundDeviceId, tod
     playDing();
     setSparkle(true);
     setTimeout(() => setSparkle(false), 800);
-    const startedAt = performance.now();
+    setToast(null);
+    setSuccessDialog({ type, timing: formatTimingMs(0) });
 
     startTransition(async () => {
       const deviceId = getOrCreateDeviceId();
@@ -185,13 +186,13 @@ export default function CheckinClient({ empName, empId, role, boundDeviceId, tod
           router.replace('/account/device');
           return;
         }
+        setSuccessDialog(null);
         setToast({ kind: 'err', msg: res.error });
         return;
       }
 
       setToast(null);
-      setSuccessDialog({ type, timing: formatTimingMs(performance.now() - startedAt) });
-      setTimeout(() => router.refresh(), 50);
+      setTimeout(() => router.refresh(), 650);
     });
   }
 
