@@ -13,14 +13,11 @@ export default function ChangePinPage() {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [forced, setForced] = useState(false);
-  const [onboardingEmpId, setOnboardingEmpId] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
   useEffect(() => {
-    const empId = new URL(window.location.href).searchParams.get('emp')?.trim().toUpperCase();
-    if (empId) setOnboardingEmpId(empId);
     router.prefetch('/checkin');
     router.prefetch('/account/device/bind');
     router.prefetch('/logout');
@@ -47,7 +44,7 @@ export default function ChangePinPage() {
 
     setSubmitting(true);
     startTransition(async () => {
-      const result = await changePin({ empId: onboardingEmpId, oldPin, newPin });
+      const result = await changePin({ oldPin, newPin });
       if (result?.error) { setErr(result.error); setSubmitting(false); return; }
 
       setOk(true);
