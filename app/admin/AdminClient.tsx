@@ -62,6 +62,22 @@ function monthLastDateInput(monthStr: string) {
   return `${monthStr}-${String(lastDay).padStart(2, '0')}`;
 }
 
+function noticeTone(message: string) {
+  if (message.startsWith('กำลัง')) {
+    return { icon: 'ti-loader-2', color: C.purple, title: 'กำลังทำงาน' };
+  }
+  if (
+    message.startsWith('กรุณา') ||
+    message.startsWith('ไม่') ||
+    message.includes('ไม่สำเร็จ') ||
+    message.includes('ถูกระงับ') ||
+    message.includes('ไม่มีไฟล์')
+  ) {
+    return { icon: 'ti-alert-circle', color: C.redDeep, title: 'แจ้งเตือน' };
+  }
+  return { icon: 'ti-circle-check-filled', color: C.mintDeep, title: 'สำเร็จ' };
+}
+
 export default function AdminClient({
   adminName, monthStr, employees, checkins, settings, deviceRequests, branchNames, leaveRequests,
 }: {
@@ -96,9 +112,8 @@ export default function AdminClient({
   useEffect(() => { setDevReqs(deviceRequests); }, [deviceRequests]);
 
   function manualRefresh() {
-    setLiveNotice('กำลังรีเฟรชข้อมูล...');
+    setLiveNotice('รีเฟรชข้อมูลแล้ว');
     router.refresh();
-    setTimeout(() => setLiveNotice(null), 2200);
   }
 
   function handleApproveDevice(id: string) {
@@ -192,15 +207,14 @@ export default function AdminClient({
     const validation = validateSingleMonthDateRange(cleanupFrom, cleanupTo);
     if (!validation.ok) {
       setLiveNotice(validation.error);
-      setTimeout(() => setLiveNotice(null), 2600);
       return;
     }
 
     startTransition(async () => {
-      setLiveNotice('????????? Excel ????????????...');
+      setLiveNotice('กำลังเก็บ Excel และล้างข้อมูล...');
       const res = await cleanupCheckinsInRange({ dateFrom: cleanupFrom, dateTo: cleanupTo });
       const hasError = 'error' in res && Boolean(res.error);
-      setLiveNotice(hasError ? res.error ?? '???????????????????' : res.message ?? '????????????????');
+      setLiveNotice(hasError ? res.error ?? 'ล้างข้อมูลไม่สำเร็จ' : res.message ?? 'ล้างข้อมูลสำเร็จ');
       if (!hasError) {
         setCleanupOpen(false);
         router.refresh();
@@ -317,7 +331,6 @@ export default function AdminClient({
       });
       XLSX.writeFile(wb, makeAttendanceReportFileName(monthStr), { cellStyles: true });
       setLiveNotice('ดาวน์โหลดรายงานจากข้อมูลปัจจุบันแล้ว');
-      setTimeout(() => setLiveNotice(null), 2200);
       return;
     }
 
@@ -325,12 +338,10 @@ export default function AdminClient({
     if (!('ok' in res)) {
       const message = ('error' in res && res.error) ? res.error : 'โหลดไฟล์รายงานไม่สำเร็จ';
       setLiveNotice(message === 'ไม่มีไฟล์รายงานของเดือนนี้' ? 'ไม่มีไฟล์' : message);
-      setTimeout(() => setLiveNotice(null), 2600);
       return;
     }
     if (!res.url || !res.fileName) {
       setLiveNotice('โหลดไฟล์รายงานไม่สำเร็จ');
-      setTimeout(() => setLiveNotice(null), 2600);
       return;
     }
 
@@ -341,22 +352,26 @@ export default function AdminClient({
     link.click();
     link.remove();
     setLiveNotice('ดาวน์โหลดไฟล์รายงานที่เก็บไว้แล้ว');
-    setTimeout(() => setLiveNotice(null), 2200);
   }
+
+  const activeNotice = liveNotice ? noticeTone(liveNotice) : null;
 
   return (
     <main style={{ maxWidth: 1100, margin: '0 auto', padding: 18 }}>
-      {/* Live notice */}
+      {/* Dialog notice */}
       {liveNotice && (
-        <div style={{
-          position: 'fixed', top: 18, left: '50%', transform: 'translateX(-50%)',
-          background: '#0e0e10', color: '#d6f26b',
-          padding: '10px 18px', borderRadius: 999, fontSize: 13, fontWeight: 600,
-          boxShadow: '0 8px 20px rgba(0,0,0,0.18)', zIndex: 100,
-          animation: 'pop-in 0.2s ease-out',
-        }}>{liveNotice}</div>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 180, display: 'grid', placeItems: 'center', padding: 18 }}>
+          <div style={{ width: '100%', maxWidth: 340, background: '#fff', borderRadius: 18, padding: 20, textAlign: 'center', boxShadow: '0 18px 40px rgba(0,0,0,0.25)', animation: 'dialog-pop-in 0.18s ease-out' }}>
+            <i className={`ti ${activeNotice?.icon}`} style={{ fontSize: 54, color: activeNotice?.color }} aria-hidden></i>
+            <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8, color: C.dark }}>{activeNotice?.title}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginTop: 8, color: '#2e2e32', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{liveNotice}</div>
+            <button type="button" onClick={() => setLiveNotice(null)} style={{ marginTop: 16, width: '100%', border: 'none', borderRadius: 12, padding: 12, background: C.dark, color: C.lime, fontWeight: 800, cursor: 'pointer' }}>
+              ตกลง
+            </button>
+          </div>
+        </div>
       )}
-      <style>{`@keyframes pop-in { from { opacity: 0; transform: translateX(-50%) translateY(-8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }`}</style>
+      <style>{`@keyframes dialog-pop-in { from { opacity: 0; transform: translateY(8px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }`}</style>
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 16, flexWrap: 'wrap', gap: 10 }}>
