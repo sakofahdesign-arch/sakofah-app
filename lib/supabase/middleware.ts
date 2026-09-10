@@ -7,6 +7,7 @@ export async function updateSession(request: NextRequest) {
   const isLoginPage = path.startsWith('/login');
   const isSessionResetPage = path.startsWith('/external-login');
   const isLogoutPage = path.startsWith('/logout');
+  const needsVerifiedSession = path.startsWith('/account') || path.startsWith('/checkin');
 
   if (request.method !== 'GET' || isLoginPage || isSessionResetPage || isLogoutPage) {
     return response;
@@ -20,7 +21,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (path.startsWith('/account/pin')) {
+  if (needsVerifiedSession) {
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
