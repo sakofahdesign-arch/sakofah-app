@@ -7,7 +7,7 @@ import { submitCheckin } from './actions';
 import { createClient } from '@/lib/supabase/client';
 import { getOrCreateDeviceId } from '@/lib/device';
 import { getDeviceAccessNotice, resolveDeviceAccess } from '@/lib/device-access';
-import { checkinDialogMessage, checkinDialogTitle, formatTimingMs } from '@/lib/checkin-ui';
+import { checkinDialogMessage, checkinDialogTitle } from '@/lib/checkin-ui';
 
 type Props = {
   empName: string;
@@ -76,6 +76,7 @@ function earlyMin(ts: string, workEnd: string): number {
 }
 
 const HOLD_DURATION = 1000; // 1 วินาที
+const GPS_OPTIONS: PositionOptions = { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 };
 
 export default function CheckinClient({ empName, empId, role, boundDeviceId, todayCheckins, settings, checkinLocation }: Props) {
   const router = useRouter();
@@ -88,7 +89,7 @@ export default function CheckinClient({ empName, empId, role, boundDeviceId, tod
   const [holdProgress, setHoldProgress] = useState(0);
   const [sparkle, setSparkle] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [successDialog, setSuccessDialog] = useState<{ type: 'in' | 'out'; timing: string } | null>(null);
+  const [successDialog, setSuccessDialog] = useState<{ type: 'in' | 'out' } | null>(null);
   const holdTimer = useRef<number | null>(null);
   const holdStart = useRef<number>(0);
 
@@ -113,12 +114,26 @@ export default function CheckinClient({ empName, empId, role, boundDeviceId, tod
       setGpsError('เบราเซอร์นี้ไม่รองรับ GPS');
       return;
     }
-    const watch = navigator.geolocation.watchPosition(
-      (pos) => { setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setGpsError(null); },
-      (err) => setGpsError(err.message),
-      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
-    );
-    return () => navigator.geolocation.clearWatch(watch);
+    const updateCoords = (pos: GeolocationPosition) => {
+      setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+      setGpsError(null);
+    };
+    const handleError = (err: GeolocationPositionError) => setGpsError(err.message);
+    const refreshGps = () => {
+      if (document.visibilityState === 'visible') {
+        navigator.geolocation.getCurrentPosition(updateCoords, handleError, GPS_OPTIONS);
+      }
+    };
+
+    const watch = navigator.geolocation.watchPosition(updateCoords, handleError, GPS_OPTIONS);
+    refreshGps();
+    window.addEventListener('focus', refreshGps);
+    document.addEventListener('visibilitychange', refreshGps);
+    return () => {
+      navigator.geolocation.clearWatch(watch);
+      window.removeEventListener('focus', refreshGps);
+      document.removeEventListener('visibilitychange', refreshGps);
+    };
   }, []);
 
   const distance = coords && checkinLocation ? distanceMeters(coords.lat, coords.lng, checkinLocation.lat, checkinLocation.lng) : null;
@@ -179,7 +194,7 @@ export default function CheckinClient({ empName, empId, role, boundDeviceId, tod
     setSparkle(true);
     setTimeout(() => setSparkle(false), 800);
     setToast(null);
-    setSuccessDialog({ type, timing: formatTimingMs(0) });
+    setSuccessDialog({ type });
 
     startTransition(async () => {
       const deviceId = getOrCreateDeviceId();
@@ -436,7 +451,6 @@ export default function CheckinClient({ empName, empId, role, boundDeviceId, tod
             <i className="ti ti-circle-check-filled" style={{ fontSize: 54, color: '#5dcaa5' }} aria-hidden></i>
             <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8 }}>{checkinDialogTitle(successDialog.type)}</div>
             <div style={{ fontSize: 16, fontWeight: 700, marginTop: 4 }}>{checkinDialogMessage()}</div>
-            <div style={{ fontSize: 11, color: '#5c5c60', marginTop: 6 }}>{successDialog.timing}</div>
             <button type="button" onClick={() => setSuccessDialog(null)} style={{ marginTop: 16, width: '100%', border: 'none', borderRadius: 12, padding: 12, background: '#0e0e10', color: '#d6f26b', fontWeight: 800, cursor: 'pointer' }}>
               ตกลง
             </button>

@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase/client';
 import { submitOffsite } from './actions';
 import { getOrCreateDeviceId } from '@/lib/device';
 import { getDeviceAccessNotice, resolveDeviceAccess } from '@/lib/device-access';
-import { checkinDialogMessage, checkinDialogTitle, formatTimingMs } from '@/lib/checkin-ui';
+import { checkinDialogMessage, checkinDialogTitle } from '@/lib/checkin-ui';
 import { OFFSITE_PHOTO_QUALITY, fitImageDimensions } from '@/lib/offsite-photo';
 
 // in-app browser (LINE, FB, IG ฯลฯ) มักบล็อก getUserMedia → ต้องใช้กล้องเนทีฟผ่าน file input
@@ -16,6 +16,8 @@ function isInAppBrowser(): boolean {
   const ua = navigator.userAgent || '';
   return /\bLine\/|FBAN|FBAV|Instagram|Messenger|MicroMessenger|GSA\//i.test(ua);
 }
+
+const GPS_OPTIONS: PositionOptions = { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 };
 
 export default function OffsitePage() {
   return (
@@ -42,7 +44,7 @@ function OffsiteInner() {
   const [direction, setDirection] = useState<'in' | 'out'>('in');
   const [err, setErr] = useState<string | null>(null);
   const [camFallback, setCamFallback] = useState(false);
-  const [successDialog, setSuccessDialog] = useState<{ type: 'offsite_in' | 'offsite_out'; timing: string } | null>(null);
+  const [successDialog, setSuccessDialog] = useState<{ type: 'offsite_in' | 'offsite_out' } | null>(null);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
 
@@ -95,11 +97,30 @@ function OffsiteInner() {
   }, []);
 
   useEffect(() => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (e) => setErr('GPS ไม่ทำงาน: ' + e.message),
-      { enableHighAccuracy: true }
-    );
+    if (!navigator.geolocation) {
+      setErr('GPS ไม่ทำงาน: เบราเซอร์นี้ไม่รองรับตำแหน่ง');
+      return;
+    }
+
+    const updateCoords = (pos: GeolocationPosition) => {
+      setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+    };
+    const handleError = (e: GeolocationPositionError) => setErr('GPS ไม่ทำงาน: ' + e.message);
+    const refreshGps = () => {
+      if (document.visibilityState === 'visible') {
+        navigator.geolocation.getCurrentPosition(updateCoords, handleError, GPS_OPTIONS);
+      }
+    };
+
+    const watch = navigator.geolocation.watchPosition(updateCoords, handleError, GPS_OPTIONS);
+    refreshGps();
+    window.addEventListener('focus', refreshGps);
+    document.addEventListener('visibilitychange', refreshGps);
+    return () => {
+      navigator.geolocation.clearWatch(watch);
+      window.removeEventListener('focus', refreshGps);
+      document.removeEventListener('visibilitychange', refreshGps);
+    };
   }, []);
 
   async function startCamera(mode: 'environment' | 'user' = facing) {
@@ -249,7 +270,7 @@ function OffsiteInner() {
 
     const optimisticType = direction === 'in' ? 'offsite_in' : 'offsite_out';
     setErr(null);
-    setSuccessDialog({ type: optimisticType, timing: formatTimingMs(0) });
+    setSuccessDialog({ type: optimisticType });
     startTransition(async () => {
       const res = await submitOffsite(fd);
       if (res?.error === 'DEVICE_NOT_BOUND') router.replace('/account/device/bind');
@@ -420,7 +441,6 @@ function OffsiteInner() {
             <i className="ti ti-circle-check-filled" style={{ fontSize: 54, color: '#5dcaa5' }} aria-hidden></i>
             <div style={{ fontSize: 20, fontWeight: 800, marginTop: 8 }}>{checkinDialogTitle(successDialog.type)}</div>
             <div style={{ fontSize: 16, fontWeight: 700, marginTop: 4 }}>{checkinDialogMessage()}</div>
-            <div style={{ fontSize: 11, color: '#5c5c60', marginTop: 6 }}>{successDialog.timing}</div>
             <button type="button" onClick={goBackToCheckin} style={{ marginTop: 16, width: '100%', border: 'none', borderRadius: 12, padding: 12, background: '#0e0e10', color: '#d6f26b', fontWeight: 800, cursor: 'pointer' }}>
               ตกลง
             </button>
