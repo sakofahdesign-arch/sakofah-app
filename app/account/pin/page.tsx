@@ -30,7 +30,7 @@ export default function ChangePinPage() {
   }, []);
 
   function submit() {
-    if (submitting || pending || ok) return;
+    if (submitting || pending || ok || !pinReady) return;
     setErr(null);
     if (newPin.length < 6) { setErr('PIN ใหม่ต้องมีอย่างน้อย 6 หลัก'); return; }
     if (newPin === '123456') { setErr('ห้ามใช้ PIN เริ่มต้น 123456 — โปรดตั้งรหัสใหม่'); return; }
@@ -64,6 +64,14 @@ export default function ChangePinPage() {
   }
 
   const submitLocked = submitting || pending || ok;
+  const pinReady =
+    oldPin.length >= 6 &&
+    newPin.length >= 6 &&
+    confirmPin.length > 0 &&
+    newPin !== '123456' &&
+    newPin !== oldPin &&
+    newPin === confirmPin;
+  const submitDisabled = submitLocked || !pinReady;
 
   return (
     <main style={{ minHeight: '100vh', maxWidth: 420, margin: '0 auto', padding: 18 }}>
@@ -106,7 +114,7 @@ export default function ChangePinPage() {
           </div>
         )}
 
-        <button onClick={submit} disabled={submitLocked} style={{ background: '#d6f26b', color: '#0e0e10', border: 'none', borderRadius: 14, padding: 13, fontWeight: 700, fontSize: 14, cursor: submitLocked ? 'not-allowed' : 'pointer', marginTop: 4, opacity: submitLocked ? 0.45 : 1 }}>
+        <button onClick={submit} disabled={submitDisabled} style={{ background: pinReady ? '#d6f26b' : '#2a2a2d', color: pinReady ? '#0e0e10' : '#8e8e92', border: 'none', borderRadius: 14, padding: 13, fontWeight: 700, fontSize: 14, cursor: submitDisabled ? 'not-allowed' : 'pointer', marginTop: 4, opacity: submitLocked ? 0.45 : 1 }}>
           {submitLocked ? 'กำลังบันทึก...' : forced ? 'ตั้ง PIN แล้วไปต่อ' : 'ยืนยันเปลี่ยน PIN'}
         </button>
         <button onClick={cancel} disabled={submitLocked} style={{ background: 'transparent', color: '#c9c9cc', border: '1px solid #2a2a2d', borderRadius: 14, padding: 12, fontWeight: 700, fontSize: 13, cursor: submitLocked ? 'not-allowed' : 'pointer', opacity: submitLocked ? 0.45 : 1 }}>

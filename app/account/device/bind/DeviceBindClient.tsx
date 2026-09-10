@@ -124,7 +124,9 @@ export default function DeviceBindClient({
 
   const mismatch = Boolean(boundDeviceId && deviceId && boundDeviceId !== deviceId);
   const nativeCamera = typeof navigator !== 'undefined' && (isInAppBrowser() || !navigator.mediaDevices?.getUserMedia);
+  const permissionsReady = gps === 'ok' && camera === 'ok';
   const submitLocked = submitting || pending;
+  const submitDisabled = submitLocked || mismatch || !deviceId || !permissionsReady;
 
   function cancel() {
     if (submitLocked) return;
@@ -172,7 +174,7 @@ export default function DeviceBindClient({
           <>
             <PermissionRow icon="map-pin" title="ตำแหน่ง" status={gps} onClick={requestGps} />
             {nativeCamera ? (
-              <PermissionFileRow icon="camera" title="กล้อง" status={camera} onChange={onCameraFile} onOpen={() => setCamera('ok')} />
+              <PermissionFileRow icon="camera" title="กล้อง" status={camera} onChange={onCameraFile} />
             ) : (
               <PermissionRow icon="camera" title="กล้อง" status={camera} onClick={requestCamera} />
             )}
@@ -195,8 +197,8 @@ export default function DeviceBindClient({
 
         <button
           onClick={confirmBind}
-          disabled={submitLocked || mismatch || !deviceId}
-          style={{ background: LIME, color: DARK, border: 'none', borderRadius: 14, padding: 14, fontWeight: 800, fontSize: 14, cursor: (submitLocked || mismatch || !deviceId) ? 'not-allowed' : 'pointer', opacity: (submitLocked || mismatch || !deviceId) ? 0.45 : 1 }}
+          disabled={submitDisabled}
+          style={{ background: permissionsReady && !mismatch && deviceId ? LIME : '#2a2a2d', color: permissionsReady && !mismatch && deviceId ? DARK : '#8e8e92', border: 'none', borderRadius: 14, padding: 14, fontWeight: 800, fontSize: 14, cursor: submitDisabled ? 'not-allowed' : 'pointer', opacity: submitLocked ? 0.45 : 1 }}
         >
           {submitLocked ? 'กำลังผูกเครื่อง...' : 'ยืนยันผูกเครื่องนี้'}
         </button>
@@ -228,12 +230,12 @@ function PermissionRow({ icon, title, status, onClick }: { icon: string; title: 
   );
 }
 
-function PermissionFileRow({ icon, title, status, onChange, onOpen }: { icon: string; title: string; status: PermissionState; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; onOpen: () => void }) {
+function PermissionFileRow({ icon, title, status, onChange }: { icon: string; title: string; status: PermissionState; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void }) {
   const color = status === 'ok' ? LIME : status === 'error' ? '#ff9d9d' : '#c9c9cc';
   const text = status === 'ok' ? 'อนุญาตแล้ว' : status === 'error' ? 'ไม่สำเร็จ' : 'แตะเพื่ออนุญาต';
 
   return (
-    <label onPointerDown={onOpen} style={{ position: 'relative', background: '#1a1a1c', borderRadius: 14, padding: '12px 14px', color: '#fff', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', overflow: 'hidden' }}>
+    <label style={{ position: 'relative', background: '#1a1a1c', borderRadius: 14, padding: '12px 14px', color: '#fff', display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left', cursor: 'pointer', overflow: 'hidden' }}>
       <i className={`ti ti-${icon}`} style={{ fontSize: 22, color }} aria-hidden></i>
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 14, fontWeight: 700 }}>{title}</div>
