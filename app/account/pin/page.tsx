@@ -12,6 +12,7 @@ export default function ChangePinPage() {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [forced, setForced] = useState(false);
+  const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -22,6 +23,7 @@ export default function ChangePinPage() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setAuthEmail(user.email ?? null);
       const { data: emp } = await supabase.from('employees').select('pin_changed').eq('id', user.id).single();
       if (emp && !emp.pin_changed) setForced(true);
     })();
@@ -39,10 +41,11 @@ export default function ChangePinPage() {
     startTransition(async () => {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user?.email) { setErr('ไม่ได้เข้าสู่ระบบ'); setSubmitting(false); return; }
+      const email = user?.email ?? authEmail;
+      if (!email) { setErr('ไม่ได้เข้าสู่ระบบ'); setSubmitting(false); return; }
 
       // verify old pin
-      const { error: signinErr } = await supabase.auth.signInWithPassword({ email: user.email, password: oldPin });
+      const { error: signinErr } = await supabase.auth.signInWithPassword({ email, password: oldPin });
       if (signinErr) { setErr('PIN เดิมไม่ถูกต้อง'); setSubmitting(false); return; }
 
       const { error } = await supabase.auth.updateUser({ password: newPin });
